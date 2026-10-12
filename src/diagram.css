@@ -55,3 +55,13 @@
 .dg-pstats .st small { font-size: 0.72rem; color: var(--ink-2); }
 .dg-pstats .wide { grid-column: 1 / -1; }
 #dg-svg .node.probed rect.box, #dg-svg .edge.probed { stroke: var(--s-mc); }
+.dg-tf { border-top: 1px solid var(--rule-2); padding-top: 12px; display: grid; gap: 8px; }
+.dg-tf > summary { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; justify-content: space-between; cursor: pointer; list-style: none; }
+.dg-tf > summary::-webkit-details-marker { display: none; }
+.dg-tf > summary h3::before { content: "▸ "; color: var(--ink-3); }
+.dg-tf[open] > summary h3::before { content: "▾ "; }
+.dg-tf > div, .dg-tf > p { margin-top: 8px; }
+#dg-tf-body { display: grid; gap: 8px; }
+#dg-tf-body[hidden], #dg-tfg[hidden] { display: none; }
+#dg-tfg { display: grid; gap: 8px; }
+.dg-tfnotes { margin: 0; padding-left: 1.2em; color: var(--ink-2); font-size: 0.84rem; display: grid; gap: 4px; }

@@ -388,6 +388,72 @@
       for (let i = 0; i < 60; i++) { const m = 0.5 * (lo + hi), w = wetState(cfg, p, Math.exp(m), p.rh_inst, g.T); if (aeroFromWet(ph, w.d, w.rho, ph.chi) < cut) lo = m; else hi = m; }
       return Math.exp(0.5 * (lo + hi));
     };
+    // ---- transfer function of a single block, as a function of dry particle diameter ----
+    // spec.kind: tube | impactor | dryer | neutralizer | dma | cpc | aps | diluter
+    S.blockCurves = (cfg, spec) => {
+      const ph = physics(g, cfg.slip, chiOf(cfg)), x = Array.from(d, (v) => v * 1e9);
+      const out = { x, series: [], yLabel: "Transmission (fraction)", yMax: 1.05, notes: [] };
+      const each = (f) => Array.from(d, f);
+      const rh = spec.rh == null ? p.rh_inst : spec.rh;
+      const wet = (di, r) => wetState(cfg, p, di, r == null ? rh : r, g.T);
+      if (spec.kind === "tube" || spec.kind === "dryer") {
+        const L = spec.kind === "dryer" ? spec.L : spec.L, D = spec.D || 4.6e-3, Q = spec.Q || p.qa, U = Q / (Math.PI * D * D / 4);
+        const rhT = spec.kind === "dryer" ? spec.rhOut : rh;
+        const dif = each((di) => { const w = wet(di, rhT); return cfg.line_diff === "gk1949" ? clamp(diffPen(ph.diffusivity(w.d), L, Q), 0, 1) : 1; });
+        const set = each((di) => { const w = wet(di, rhT); return cfg.line_settle === "thomas" ? settlePen(w.rho * w.d * w.d * GRAV * ph.slip(w.d) / (18 * g.mu * ph.chi), L, D, U) : 1; });
+        const bnd = each((di) => { const w = wet(di, rhT); return cfg.line_bend !== "none" && spec.bends > 0 ? bendPen(cfg.line_bend, w.rho * w.d * w.d * ph.slip(w.d) * U / (9 * g.mu * D * ph.chi), spec.bends * Math.PI / 2) : 1; });
+        out.series.push({ name: "Total", y: dif.map((v, i) => v * set[i] * bnd[i]), main: true },
+          { name: "Diffusion", y: dif }, { name: "Settling", y: set });
+        if (spec.bends > 0) out.series.push({ name: "Bends", y: bnd });
+        out.notes.push(`L = ${(+L).toFixed(2)} m, inner diameter ${(D * 1e3).toFixed(2)} mm, flow ${(Q * 60000).toFixed(2)} L/min${spec.bends ? `, ${spec.bends} × 90° bends` : ""}, RH ${Math.round(rhT * 100)}%.`);
+        if (spec.kind === "dryer") {
+          out.growth = { name: "Growth factor", yIn: each((di) => wet(di, spec.rhIn).gf), yOut: each((di) => wet(di, spec.rhOut).gf), rhIn: spec.rhIn, rhOut: spec.rhOut };
+          out.notes.push(`Particles enter at ${Math.round(spec.rhIn * 100)}% RH and leave at ${Math.round(spec.rhOut * 100)}% RH (κ = ${p.kappa}).`);
+        }
+      } else if (spec.kind === "impactor") {
+        const cut = cfg.impactor === "none" ? null : S.impactorCut(cfg);
+        if (!cut) { out.notes.push("The selected Truth model ignores the impactor."); out.series.push({ name: "Penetration", y: each(() => 1), main: true }); }
+        else {
+          out.series.push({ name: "Penetration", main: true, y: each((di) => { const w = wet(di); const dd = cfg.impactor === "geometric" ? w.d : aeroFromWet(ph, w.d, w.rho, ph.chi); return 1 / (1 + Math.pow(dd / cut, p.impactor_slope)); }) });
+          out.series.push({ name: "Against aerodynamic diameter", y: each((di) => 1 / (1 + Math.pow(di / cut, p.impactor_slope))) });
+          out.notes.push(`Cut ${Math.round(cut * 1e9)} nm aerodynamic = ${Math.round(S.geometricCut(cfg) * 1e9)} nm particle size at density ${p.rho} kg/m³, χ ${chiOf(cfg)}, RH ${Math.round(rh * 100)}%. The dashed curve uses aerodynamic diameter on the x axis.`);
+        }
+      } else if (spec.kind === "neutralizer") {
+        out.yLabel = "Fraction of particles";
+        const ks = [0, 1, 2, 3];
+        ks.forEach((k) => out.series.push({ name: k === 0 ? "Neutral" : `+${k}`, main: k === 1, y: each((di) => { const w = wet(di); return k === 2 && cfg.charges === "single" ? 0 : chargeFraction(k === 0 ? "w88" : cfg.charging, w.d, k, g.T, custom); }) }));
+        out.notes.push("Positive charge states; the negative side is similar. Multiple charges are only counted when the Multiple charging model is on.");
+      } else if (spec.kind === "dma") {
+        const V = spec.V, Zs = S.Zstar(V), kmax = cfg.charges === "multiple" ? p.max_charge : 1;
+        const gam = Math.pow(p.r1 / p.r2, 2), I = 0.5 * (1 + gam), kap = p.L * p.r2 / (p.r2 * p.r2 - p.r1 * p.r1);
+        const Gf = 4 * Math.pow(1 + beta, 2) / (1 - gam) * (I + Math.pow(2 * (1 + beta) * kap, -2));
+        const om = (w, k) => { const sig = cfg.dma_tf === "stolzenburg1988" ? Math.sqrt(Gf * 2 * Math.PI * p.L * ph.diffusivity(w.d) / p.qsh) : null; const Zt = ph.mobility(w.d, k) / Zs; return Math.abs(Zt - 1) < beta + (sig ? 6 * sig : 0) ? transfer(Zt, beta, sig) : 0; };
+        const loss = (w) => cfg.dma_loss === "gk_leff" ? clamp(diffPen(ph.diffusivity(w.d), p.dma_Leff, p.qa), 0, 1) : 1;
+        out.yLabel = "Fraction transmitted";
+        out.series.push({ name: "Transfer function Ω (+1)", main: true, y: each((di) => om(wet(di), 1)) });
+        out.series.push({ name: "With charging and losses, all charges", y: each((di) => { const w = wet(di); let t = 0; for (let k = 1; k <= kmax; k++) t += chargeFraction(cfg.charging, w.d, k, g.T, custom) * om(w, k); return t * loss(w); }) });
+        const d1 = ph.dFromMobility(Zs, 1);
+        out.notes.push(`At ${V < 100 ? V.toFixed(1) : Math.round(V)} V the DMA selects ${Math.round(d1 * 1e9)} nm singly charged particles (β = ${beta.toFixed(2)}, ${cfg.dma_tf === "stolzenburg1988" ? "diffusing" : "triangular"} transfer function). Peaks at larger sizes in the second curve are multiply charged particles.`);
+      } else if (spec.kind === "cpc") {
+        out.yLabel = "Counting efficiency";
+        out.series.push({ name: "Counting efficiency", main: true, y: each((di) => { const w = wet(di); return cfg.cpc_eff === "exp_d50" ? 1 - Math.exp(-Math.LN2 * Math.max((w.d - p.cpc_d0) / (p.cpc_d50 - p.cpc_d0), 0)) : cfg.cpc_eff && cfg.cpc_eff.startsWith("user:") && custom[cfg.cpc_eff] ? clamp(tableInterp(custom[cfg.cpc_eff], w.d * 1e9), 0, 1) : 1; }) });
+        out.notes.push(`d50 ${(p.cpc_d50 * 1e9).toFixed(1)} nm, no counts below ${(p.cpc_d0 * 1e9).toFixed(1)} nm. Mixing time ${p.cpc_tau} s smears the signal in time; that is not shown here.`);
+      } else if (spec.kind === "aps") {
+        const a = spec;
+        out.yLabel = "Counting efficiency";
+        out.series.push({ name: "Against particle size", main: true, y: each((di) => { const w = wet(di, a.rh); return di < 0.15e-6 ? 0 : apsEff(a, aeroFromWet(ph, w.d, w.rho, ph.chi)); }) });
+        out.series.push({ name: "Against aerodynamic diameter", y: each((di) => apsEff(a, di)) });
+        const dpOfDa = (da) => { let lo = Math.log(1e-8), hi = Math.log(1e-4); for (let i = 0; i < 60; i++) { const m = 0.5 * (lo + hi), w = wet(Math.exp(m), a.rh); if (aeroFromWet(ph, w.d, w.rho, ph.chi) < da) lo = m; else hi = m; } return Math.exp(0.5 * (lo + hi)); };
+        out.notes.push(`1 µm aerodynamic corresponds to ${(dpOfDa(1e-6) * 1e6).toFixed(2)} µm dry particles at density ${p.rho} kg/m³, χ ${chiOf(cfg)}. Lower detection d50 ${(a.d50lo * 1e6).toFixed(2)} µm, inlet cut ${(a.cut * 1e6).toFixed(0)} µm.`);
+      } else if (spec.kind === "diluter") {
+        out.yLabel = "Concentration ratio";
+        out.yMax = 1.05;
+        out.series.push({ name: "Output / input", main: true, y: each(() => 1 / Math.max(1, spec.factor || 1)) });
+        out.notes.push(`Dilution by ${spec.factor}× lowers all sizes equally in this model; diluter losses are not yet modeled.`);
+      }
+      return out;
+    };
+
     return S;
   }
 
@@ -496,11 +562,15 @@
     };
   }
 
+  function blockResponse(job) {
+    const S = Setup(job.params, job.custom);
+    return S.blockCurves(job.truth, job.block);
+  }
   function probe(job) {
     const S = Setup(job.params, job.custom);
     return S.probe(job.truth, lognormal(S.d, job.modes), job.probe);
   }
 
-  const api = { Setup, run, probe, lognormal, CURRENT, LEGACY, DEFAULT, chargeFraction, gas, physics, tableInterp, growthFactor };
+  const api = { Setup, run, probe, blockResponse, lognormal, CURRENT, LEGACY, DEFAULT, chargeFraction, gas, physics, tableInterp, growthFactor };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.STREAM = api;
 })(typeof self !== "undefined" ? self : this);

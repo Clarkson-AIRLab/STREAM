@@ -500,7 +500,7 @@ Rules:
   function runProbe() {
     const body = $("dg-probe-body"), empty = $("dg-probe-empty");
     const g = st.graph, sel = st.sel;
-    const hide = (msg) => { body.hidden = true; empty.hidden = false; empty.textContent = msg; $("dg-probe-title").textContent = "Probe"; };
+    const hide = (msg) => { body.hidden = true; empty.hidden = false; empty.textContent = msg; $("dg-probe-title").textContent = "Probe"; tfHide(msg.replace(/^Select a block or a tube to see the aerosol at that point.*$/, "Select a block or a tube to see its transfer function: the fraction of particles of each size that it passes, counts or selects.")); };
     if (!sel) return hide("Select a block or a tube to see the aerosol at that point: at a block's outlet, or at the end of a tube.");
     let path, title, skipLast = false;
     if (sel.kind === "node") {
@@ -551,6 +551,7 @@ Rules:
         probe: { segments: seg.segs, rh: seg.rh, dil: seg.dil, impactor: !!imp, neutralized: neu, dmaV: V, cpc: cpcAfter, dmaLoss: true } });
     } catch (err) { return hide("The probe couldn't be computed for this point."); }
     body.hidden = false; empty.hidden = true;
+    try { runTF({ sel, path, edgeQ, job, params, truth, V }); } catch (err) { tfHide("The transfer function couldn't be computed for this block."); }
     drawProbe(r, { seg, imp, neu, dmaNode, cpcAfter, lastQ: path.edges.length ? edgeQ.get(path.edges[path.edges.length - 1].id) : null });
   }
   function drawProbe(r, ctx) {
@@ -585,6 +586,80 @@ Rules:
     else if (ctx.cpcAfter) h += st("CPC counts", `${fmtN(r.Nhere)} cm⁻³`, "total, no classifier upstream");
     if (r.charges) h += `<div class="st wide"><span>Charge state after the neutralizer (positive side)</span><div class="tblwrap"><table><thead><tr><th class="num">Diameter</th><th class="num">Neutral</th><th class="num">+1</th><th class="num">+2</th><th class="num">+3</th></tr></thead><tbody>${r.charges.map((c) => `<tr><td class="num">${c.d < 1e-6 ? Math.round(c.d * 1e9) + " nm" : (c.d * 1e6).toFixed(0) + " µm"}</td><td class="num">${pct(c.f0)}</td><td class="num">${pct(c.f1)}</td><td class="num">${pct(c.f2)}</td><td class="num">${pct(c.f3)}</td></tr>`).join("")}</tbody></table></div></div>`;
     $("dg-pstats").innerHTML = h;
+  }
+
+  // ------------------------------------------------------------ transfer function of the selected block
+  function tfHide(msg) { $("dg-tf-body").hidden = true; const e = $("dg-tf-empty"); e.hidden = false; e.textContent = msg; $("dg-tf-title").textContent = "Transfer function"; }
+  function runTF(c) {
+    const g = st.graph, sel = c.sel;
+    const params = Object.assign({}, c.params), truth = Object.assign({}, c.truth);
+    let spec = null, title = "", extra = [];
+    if (sel.kind === "edge") {
+      const e = g.edges.find((x) => x.id === sel.id), a = g.nodes.find((x) => x.id === e.from), b = g.nodes.find((x) => x.id === e.to);
+      const n = c.path.edges.length, rhIn = segmentsAlong(c.path, n - 1, c.edgeQ, false).rh;
+      const Q = (c.edgeQ.get(e.id) || +e.flow_lpm || 1) / 60000;
+      title = `Transfer function of the tube ${a.label} → ${b.label}`;
+      if (!(+e.length_m > 0)) extra.push("This connection has no tubing length set, so it passes every size. Set a length in the panel on the right.");
+      if (+e.length_m > 0 && !+e.id_mm) extra.push("Inner diameter not set; 4.6 mm assumed.");
+      spec = { kind: "tube", L: +e.length_m || 0, D: (+e.id_mm || 4.6) * 1e-3, Q, bends: +e.bends || 0, rh: rhIn };
+    } else {
+      const n = g.nodes.find((x) => x.id === sel.id), T = TYPES[n.type] || TYPES.other, np = n.params;
+      const k = c.path.nodes.indexOf(n), eIn = k > 0 ? c.path.edges[k - 1] : null;
+      const rhIn = segmentsAlong(c.path, c.path.edges.length, c.edgeQ, true).rh;
+      const Qin = eIn && c.edgeQ.get(eIn.id) ? c.edgeQ.get(eIn.id) / 60000 : null;
+      title = `Transfer function of ${n.label}`;
+      if (n.type === "source") return tfHide("The aerosol source has no transfer function. Select a block downstream of it or a tube.");
+      if (T.sim === "pass") return tfHide(`${n.label}: modeled as passing every size unchanged for now, so its transfer function is 1 at all sizes.`);
+      if (T.sim === "no") return tfHide(`${n.label} is not simulated yet, so STREAM has no transfer function for it.`);
+      if (n.type === "impactor" || n.type === "cyclone") {
+        params.impactor_d50 = (+np.d50_nm || 700) * 1e-9; params.impactor_slope = +np.steepness || 8;
+        params.impactor_W = n.type === "impactor" && +np.nozzle_mm ? +np.nozzle_mm * 1e-3 : null;
+        if (!params.impactor_W) delete params.impactor_W;
+        params.impactor_Q = Qin || params.qa;
+        if (truth.impactor === "none") truth.impactor = params.impactor_W ? "stk50" : "logistic";
+        if (truth.impactor === "stk50" && !params.impactor_W) truth.impactor = "logistic";
+        spec = { kind: "impactor", rh: rhIn };
+      } else if (n.type === "neutralizer") spec = { kind: "neutralizer", rh: rhIn };
+      else if (n.type === "dma") spec = { kind: "dma", V: c.V, rh: rhIn };
+      else if (n.type === "cpc") {
+        Object.assign(params, { cpc_d50: (+np.d50_nm || 7) * 1e-9, cpc_d0: (+np.d0_nm || 3) * 1e-9, cpc_tau: +np.tau_s || 0.6 });
+        if (params.cpc_d0 >= params.cpc_d50) params.cpc_d0 = params.cpc_d50 * 0.5;
+        spec = { kind: "cpc", rh: rhIn };
+      } else if (n.type === "aps") spec = { kind: "aps", Q: (+np.flow_lpm || 1) / 60000, t: +np.sample_s || 20, d50lo: (+np.d50_lo_um || 0.6) * 1e-6, cut: (+np.cut_um || 15) * 1e-6, res: +np.res || 1.05, rh: rhIn };
+      else if (n.type === "diluter") spec = { kind: "diluter", factor: Math.max(1, +np.factor || 1), rh: rhIn };
+      else if (n.type === "dryer") {
+        spec = { kind: "dryer", L: +np.length_m || 0, D: (+np.id_mm || 10) * 1e-3, Q: Qin || params.qa, rhIn, rhOut: Math.min(rhIn, (+np.rh_out_pct || 0) / 100), rh: rhIn };
+        if ((+np.rh_out_pct || 0) / 100 > rhIn) extra.push(`The air entering is already drier (${Math.round(rhIn * 100)}% RH) than the dryer's outlet setting, so the dryer does not change the humidity.`);
+      } else return tfHide(`${n.label} has no transfer function yet.`);
+    }
+    const r = UI.engine().blockResponse({ params, truth, custom: c.job.custom, block: spec });
+    $("dg-tf-title").textContent = title;
+    $("dg-tf-empty").hidden = true; $("dg-tf-body").hidden = false;
+    drawTF(r, extra, spec);
+  }
+  const TF_COLORS = ["var(--s-b)", "var(--s-a)", "var(--s-mc)", "var(--s-truth)", "var(--ink-3)"];
+  function drawTF(r, extra, spec) {
+    const xs = r.x, pctf = (v) => isFinite(v) ? (v >= 0.995 ? "100%" : v < 0.001 && v > 0 ? "<0.1%" : `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`) : "—";
+    const series = r.series.map((s, i) => ({ name: s.name, x: xs, y: Array.from(s.y), color: TF_COLORS[i % TF_COLORS.length], dash: !s.main && i > 0, width: s.main ? 2.25 : 1.5, at: (v) => UI.interpLog(xs, Array.from(s.y), v) }));
+    UI.legend($("dg-tflg"), series.map((s) => ({ name: s.name, color: s.color, cls: s.dash ? "dash" : "" })));
+    const yMax = r.yMax || 1.05;
+    UI.drawChart($("dg-tfc"), {
+      label: `${r.yLabel} against particle size`,
+      x: { domain: [1, 20000], log: true, ticks: [1, 10, 100, 1000, 10000], title: spec.kind === "aps" || spec.kind === "impactor" ? "Dry particle size (nm); dashed: aerodynamic diameter" : "Dry particle size (nm)", fmt: (v) => v < 1000 ? v.toFixed(v < 10 ? 1 : 0) + " nm" : (v / 1000).toFixed(2) + " µm" },
+      y: { domain: [0, yMax], log: false, ticks: UI.niceTicks(0, Math.min(yMax, 1), 5), title: r.yLabel, fmtv: pctf },
+      series,
+    });
+    if (r.growth) {
+      $("dg-tfg").hidden = false;
+      const gi = Array.from(r.growth.yIn), go = Array.from(r.growth.yOut), gmax = Math.max(...gi, ...go, 1.1) * 1.05;
+      const gs = [{ name: `Entering, ${Math.round(r.growth.rhIn * 100)}% RH`, x: xs, y: gi, color: "var(--s-a)", dash: true, at: (v) => UI.interpLog(xs, gi, v) },
+        { name: `Leaving, ${Math.round(r.growth.rhOut * 100)}% RH`, x: xs, y: go, color: "var(--s-b)", at: (v) => UI.interpLog(xs, go, v) }];
+      UI.legend($("dg-tfglg"), gs.map((s) => ({ name: s.name, color: s.color, cls: s.dash ? "dash" : "" })));
+      UI.drawChart($("dg-tfgc"), { label: "Hygroscopic growth factor entering and leaving the dryer",
+        x: { domain: [1, 20000], log: true, ticks: [1, 10, 100, 1000, 10000], title: "Dry particle size (nm)", fmt: (v) => v < 1000 ? v.toFixed(v < 10 ? 1 : 0) + " nm" : (v / 1000).toFixed(2) + " µm" },
+        y: { domain: [1, gmax], log: false, ticks: UI.niceTicks(1, gmax, 4), title: "Growth factor (wet / dry size)", fmtv: (v) => "×" + v.toFixed(2) }, series: gs });
+    } else $("dg-tfg").hidden = true;
+    $("dg-tfnotes").innerHTML = r.notes.concat(extra).map((t) => `<li>${esc(t)}</li>`).join("") + `<li>Curves use the Truth column of the model ledger. Change a model there to see how the block's response changes.</li>`;
   }
   $("dg-pv").addEventListener("input", scheduleProbe);
   UI.onRun.push(scheduleProbe);

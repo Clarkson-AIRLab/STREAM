@@ -46,7 +46,7 @@
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 400 14px/1.5 var(--f-body); }
-.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 28px; }
+.wrap { grid-template-columns: minmax(0, 1fr); max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 28px; }
 h1, h2, h3 { font-family: var(--f-display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: 0.005em; }
 h1 { font-size: 1.9rem; line-height: 1.1; }
 h2 { font-size: 1.25rem; }
@@ -166,11 +166,44 @@ form { display: grid; gap: 10px; }
 footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--rule); padding-top: 14px; }
 @media (max-width: 560px) { h1 { font-size: 1.5rem; } .wrap { padding-inline: 16px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+nav.site { min-width: 0; position: sticky; top: 0; z-index: 20; margin-inline: -20px; padding: 0 20px; background: var(--bg); border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 16px; }
+nav.site .brand { font: 600 1rem/1 var(--f-display); color: var(--ink); text-decoration: none; letter-spacing: 0.04em; white-space: nowrap; }
+nav.site ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; min-width: 0; flex: 1; }
+nav.site ul::-webkit-scrollbar { display: none; }
+nav.site a.nl { display: block; padding: 12px 10px; color: var(--ink-2); text-decoration: none; font-size: 0.86rem; white-space: nowrap; border-bottom: 2px solid transparent; }
+nav.site a.nl:hover { color: var(--ink); }
+nav.site a.nl[aria-current="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+nav.site .sep { width: 1px; background: var(--rule); margin: 10px 6px; flex: none; }
+.sec, .feedback { scroll-margin-top: 56px; }
+.prose { display: grid; gap: 10px; max-width: 80ch; color: var(--ink-2); }
+.prose h3 { color: var(--ink); margin-top: 6px; }
+.prose ol, .prose ul { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+.about-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.srcgroup { display: grid; gap: 6px; }
+.srcgroup h3 { font-size: 0.92rem; }
+.contact-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 16px; }
+.contact-grid .card { display: grid; gap: 6px; align-content: start; }
+.contact-grid a { color: var(--accent); overflow-wrap: anywhere; }
+@media (max-width: 560px) { nav.site { margin-inline: -16px; padding: 0 16px; gap: 8px; } nav.site ul { -webkit-mask-image: linear-gradient(to right, #000 82%, transparent); mask-image: linear-gradient(to right, #000 82%, transparent); padding-right: 24px; } }
 /*DIAGRAM_CSS*/
 </style>
 
 <div class="wrap">
-  <header class="top">
+  <nav class="site" aria-label="Site">
+    <a class="brand" href="#top">STREAM</a>
+    <ul>
+      <li><a class="nl" href="#diagram">Setup</a></li>
+      <li><a class="nl" href="#results">Results</a></li>
+      <li><a class="nl" href="#models">Models</a></li>
+      <li><a class="nl" href="#library">Library</a></li>
+      <li class="sep" aria-hidden="true"></li>
+      <li><a class="nl" href="#about">About</a></li>
+      <li><a class="nl" href="#sources">Sources</a></li>
+      <li><a class="nl" href="#contact">Contact us</a></li>
+      <li><a class="nl" href="#feedback">Feedback</a></li>
+    </ul>
+  </nav>
+  <header class="top" id="top">
     <div class="t">
       <span class="eyebrow">Simulator of Train Response for Evaluating Aerosol Measurements · prototype</span>
       <h1>STREAM</h1>
@@ -183,7 +216,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
   </header>
 
 <!--DIAGRAM_HTML-->
-  <section class="sec" aria-labelledby="h-setup">
+  <section class="sec" id="values" aria-labelledby="h-setup">
     <div class="sec-head">
       <h2 id="h-setup">Setup values</h2>
       <span class="eyebrow">aerosol → line → impactor → neutralizer → scanning DMA → CPC</span>
@@ -265,7 +298,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
     </div>
   </section>
 
-  <section class="sec" aria-labelledby="h-res">
+  <section class="sec" id="results" aria-labelledby="h-res">
     <div class="sec-head">
       <h2 id="h-res">Results</h2>
       <span class="eyebrow" id="info"></span>
@@ -289,7 +322,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
     </div>
   </section>
 
-  <section class="sec" aria-labelledby="h-models">
+  <section class="sec" id="models" aria-labelledby="h-models">
     <div class="sec-head">
       <h2 id="h-models">Models</h2>
       <span class="eyebrow">Truth generates the data · A and B invert it</span>
@@ -304,7 +337,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
     </div>
   </section>
 
-  <section class="sec" aria-labelledby="h-lib">
+  <section class="sec" id="library" aria-labelledby="h-lib">
     <div class="sec-head">
       <h2 id="h-lib">Community library</h2>
       <span class="pill" id="libstate">Connecting…</span>
@@ -372,6 +405,58 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
       <div class="card">
         <div class="sec-head"><h3>Contributions</h3><span class="eyebrow" id="ccount"></span></div>
         <div class="contribs" id="contribs"><div class="empty">Contributions appear here. Use the form to add the first measured curve or parameter set.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="about" aria-labelledby="h-about">
+    <div class="sec-head"><h2 id="h-about">About STREAM</h2><span class="eyebrow">Simulator of Train Response for Evaluating Aerosol Measurements</span></div>
+    <div class="about-grid">
+      <div class="card prose">
+        <h3>What it is</h3>
+        <p>STREAM predicts what a complete aerosol measurement setup will record. You describe the system as it is, from the aerosol source through tubing, bends, splitters, impactors, dryers, diluters and neutralizers to the instruments, and STREAM simulates the signal each instrument would produce, with realistic noise.</p>
+        <p>The same simulated data are then inverted with two sets of assumptions, side by side, so you can see what each assumption costs. The same machinery can generate the system kernel for multi-instrument inversion and training data for AI-based inversion.</p>
+        <h3>Why it matters</h3>
+        <p>What instruments report is the true aerosol transformed by every element of the sampling train. Improved transfer functions, charging models, counting efficiencies and lens transmission curves are published across many journals and reach practice slowly. STREAM brings these developments to users as selectable, referenced models.</p>
+      </div>
+      <div class="card prose">
+        <h3>How to use it</h3>
+        <ol>
+          <li>Pick a template, draw your setup, or upload a schematic image.</li>
+          <li>Select any block or tube to probe the aerosol at that point and to see that block's transfer function.</li>
+          <li>Apply the diagram, then adjust the aerosol and instrument values.</li>
+          <li>Choose models in the Truth, A and B columns and compare the inversions.</li>
+          <li>Add measured instrument curves or published parameters to the community library.</li>
+        </ol>
+        <h3>Status</h3>
+        <p>This is an unvalidated research prototype. The models implement the cited papers but have not yet been checked against experiments. Laboratory validation of each component, and of full multi-instrument systems, is the next phase of the project. All calculations run in your browser.</p>
+        <p>Developed by the AIR Lab at Clarkson University. Source code: <a href="https://github.com/Clarkson-AIRLab/STREAM" target="_blank" rel="noopener">github.com/Clarkson-AIRLab/STREAM</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="sources" aria-labelledby="h-src">
+    <div class="sec-head"><h2 id="h-src">Sources</h2><span class="eyebrow">Every published model built into STREAM</span></div>
+    <div class="card prose" id="allsrc"></div>
+  </section>
+
+  <section class="sec" id="contact" aria-labelledby="h-contact">
+    <div class="sec-head"><h2 id="h-contact">Contact us</h2></div>
+    <div class="contact-grid">
+      <div class="card">
+        <h3>Suresh Dhaniyala</h3>
+        <p class="delta">AIR Lab, Clarkson University, Potsdam, NY</p>
+        <a id="contact-mail" href="mailto:sdhaniya@clarkson.edu">sdhaniya@clarkson.edu</a>
+      </div>
+      <div class="card">
+        <h3>Code and issues</h3>
+        <p class="delta">Report problems or follow development on GitHub.</p>
+        <a href="https://github.com/Clarkson-AIRLab/STREAM" target="_blank" rel="noopener">github.com/Clarkson-AIRLab/STREAM</a>
+      </div>
+      <div class="card">
+        <h3>Contribute data or models</h3>
+        <p class="delta">Measured instrument performance curves and published model parameters are welcome. Add them in the community library, or write to us.</p>
+        <a href="#library">Go to the community library</a>
       </div>
     </div>
   </section>
@@ -554,6 +639,37 @@ window.STREAM_SITE = {
     $("refs").innerHTML = items || "<li>No published models selected.</li>";
   }
   const linkFor = (doi) => /^https?:\/\//.test(doi) ? doi : "https://doi.org/" + doi.replace(/^doi:\s*/i, "");
+
+  // ------------------------------------------------------------ Sources page: every built-in reference, grouped by component
+  function renderAllSources() {
+    const seen = new Set(), item = (k) => { const r = REFS[k]; return `<li>${esc(r.t)}${r.doi ? ` <a href="${linkFor(r.doi)}" target="_blank" rel="noopener">${esc(r.doi)}</a>` : ""}</li>`; };
+    let h = COMPONENTS.map((c) => {
+      const keys = [...new Set(c.opts.flatMap((o) => o[2] || []))].filter((k) => REFS[k]);
+      if (!keys.length) return "";
+      keys.forEach((k) => seen.add(k));
+      return `<div class="srcgroup"><h3>${esc(c.label)}</h3><ol class="refs">${keys.map(item).join("")}</ol></div>`;
+    }).join("");
+    const rest = Object.keys(REFS).filter((k) => !seen.has(k));
+    if (rest.length) h += `<div class="srcgroup"><h3>Instrument data, inversion and models in development</h3><ol class="refs">${rest.map(item).join("")}</ol></div>`;
+    h += `<p class="delta">Community contributions carry their own references, shown in the library and in the reference list under Models when selected.</p>`;
+    $("allsrc").innerHTML = h;
+  }
+  // ------------------------------------------------------------ top menu: highlight the section in view
+  function initNav() {
+    const links = [...document.querySelectorAll("nav.site a.nl")];
+    links.forEach((a) => a.addEventListener("click", () => { if (window.streamTrack) window.streamTrack("nav-" + a.getAttribute("href").slice(1)); }));
+    if (!("IntersectionObserver" in window)) return;
+    const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+    const map = { values: "diagram" }, vis = new Map();
+    const io = new IntersectionObserver((ents) => {
+      ents.forEach((e) => vis.set(e.target.id, e.isIntersecting ? e.boundingClientRect.top : null));
+      let best = null, bestTop = Infinity;
+      vis.forEach((top, id) => { if (top != null && Math.abs(top) < bestTop) { bestTop = Math.abs(top); best = id; } });
+      links.forEach((a) => a.removeAttribute("aria-current"));
+      const a = best && byId.get(map[best] || best); if (a) a.setAttribute("aria-current", "true");
+    }, { rootMargin: "-60px 0px -55% 0px" });
+    ["diagram", "values", "results", "models", "library", "about", "sources", "contact", "feedback"].forEach((id) => { const el = $(id); if (el) io.observe(el); });
+  }
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
 
   $("ledger").addEventListener("change", (e) => {
@@ -932,6 +1048,7 @@ window.STREAM_SITE = {
   window.StreamUI = { state, schedule, renderLedger, CURRENT, showDiagramNote, getDb: () => db, getUser: () => user,
     readJob, drawChart, legend, interpLog, niceTicks, engine: () => { if (!inline) { const f = new Function("self", engineSrc + "\nreturn self.STREAM;"); inline = f({}); } return inline; }, onRun };
   renderLedger();
+  renderAllSources(); initNav();
   renderContribs();
   go();
   connect();

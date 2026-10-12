@@ -1,4 +1,4 @@
-  <section class="sec" aria-labelledby="h-diag">
+  <section class="sec" id="diagram" aria-labelledby="h-diag">
     <div class="sec-head">
       <h2 id="h-diag">Setup diagram</h2>
       <span class="eyebrow" id="dg-src">Template · SMPS, long DMA</span>
@@ -41,6 +41,19 @@
             <div class="dg-pstats" id="dg-pstats"></div>
           </div>
         </div>
+        <details class="dg-tf" id="dg-tf" open>
+          <summary><h3 id="dg-tf-title">Transfer function</h3><span class="eyebrow">Truth models · this block alone</span></summary>
+          <p class="delta" id="dg-tf-empty">Select a block or a tube to see its transfer function: the fraction of particles of each size that it passes, counts or selects.</p>
+          <div id="dg-tf-body" hidden>
+            <div class="legend" id="dg-tflg"></div>
+            <div class="chart" id="dg-tfc"></div>
+            <div id="dg-tfg" hidden>
+              <div class="legend" id="dg-tfglg"></div>
+              <div class="chart" id="dg-tfgc"></div>
+            </div>
+            <ul class="dg-tfnotes" id="dg-tfnotes"></ul>
+          </div>
+        </details>
       </div>
       <div class="card dg-side">
         <div id="dg-image-box" hidden>
