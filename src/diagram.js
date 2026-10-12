@@ -315,7 +315,7 @@
     $("dg-applymsg").textContent = "Applied. The setup fields and results below now follow this diagram."; $("dg-applymsg").className = "formmsg ok";
     return true;
   }
-  $("dg-apply").addEventListener("click", () => applyGraph());
+  $("dg-apply").addEventListener("click", () => { window.streamTrack && window.streamTrack("diagram-apply"); applyGraph(); });
 
   function setSource(t) { st.source = t; $("dg-src").textContent = t; }
   function loadGraph(g, source, aerosol, apply) {
@@ -327,6 +327,7 @@
   $("dg-templates").addEventListener("click", (e) => {
     const b = e.target.closest(".dg-card"); if (!b) return;
     const t = TEMPLATES.find((x) => x.key === b.dataset.key); st.templateKey = t.key;
+    window.streamTrack && window.streamTrack("template-" + t.key);
     loadGraph(t.build(), "Template · " + t.name, t.aerosol || [[3000, 40e-9, 1.6], [1500, 150e-9, 1.5], [5, 1.5e-6, 1.8]], true);
   });
 
@@ -340,6 +341,7 @@
   async function takeFile(f) {
     if (!/^image\/(png|jpeg|webp|gif)$/.test(f.type)) { showRead("That file type isn't supported. Export the schematic as PNG or JPEG, then upload it.", true); $("dg-image-box").hidden = false; return; }
     imageBlob = f; st.imageName = f.name;
+    window.streamTrack && window.streamTrack("schematic-upload");
     st.image = await shrink(f);
     $("dg-img").src = st.image; $("dg-image-box").hidden = false; $("dg-trace-wrap").hidden = false;
     showRead(sample ? "Check that the image is clear, then select Read with Claude." : "Reading needs Claude, which isn't available in this view. Build the diagram by hand with the schematic as a guide.", !sample);

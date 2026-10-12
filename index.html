@@ -60,6 +60,16 @@ header.top .t { display: grid; gap: 6px; min-width: 0; }
 .pill { display: inline-flex; align-items: center; gap: 6px; font: 500 0.72rem/1 var(--f-mono); padding: 5px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-2); background: var(--panel); white-space: nowrap; }
 .pill.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
 .pill.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.top-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+a.btn { display: inline-flex; align-items: center; font: 500 0.82rem/1 var(--f-body); border-radius: 4px; padding: 8px 12px; text-decoration: none; border: 1px solid var(--accent); }
+a.btn.primary { background: var(--accent); color: var(--accent-ink); }
+a.btn.ghost { color: var(--accent); background: var(--panel); }
+a.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.feedback { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 24px; align-items: center; background: var(--accent-soft); border: 1px solid var(--rule); border-radius: var(--r); padding: 16px 18px; }
+.feedback p { color: var(--ink-2); max-width: 75ch; }
+.feedback ul { margin: 6px 0 0; padding-left: 1.2em; color: var(--ink-2); font-size: 0.86rem; }
+@media (max-width: 640px) { .feedback { grid-template-columns: minmax(0, 1fr); } }
+footer .privacy { display: block; margin-top: 6px; }
 .sec-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
 .sec { display: grid; gap: 14px; }
 
@@ -223,7 +233,10 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
       <h1>STREAM</h1>
       <p class="lede">Describe a sampling train, choose the physics, and see what each instrument would record. The same simulated data are then inverted twice, once with each set of assumptions you pick, so you can see what each assumption costs.</p>
     </div>
-    <span class="pill warn" title="Model implementations have not yet been checked against experiments">Unvalidated prototype</span>
+    <div class="top-actions">
+      <span class="pill warn" title="Model implementations have not yet been checked against experiments">Unvalidated prototype</span>
+      <a class="btn ghost" href="#feedback">Send feedback</a>
+    </div>
   </header>
 
   <section class="sec" aria-labelledby="h-diag">
@@ -483,7 +496,21 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
     </div>
   </section>
 
-  <footer>Prototype physics engine runs in your browser. Built-in models are implementations of the cited papers and have not yet been reviewed against experiments. Clarkson University · Center for Air and Aquatic Engineering and Science.</footer>
+  <section class="feedback" id="feedback" aria-labelledby="h-fb">
+    <div>
+      <h2 id="h-fb">Help shape STREAM</h2>
+      <p>STREAM is being developed as an open tool for the aerosol community, and your feedback decides what comes next. Please tell us who you are and how you would use it. It takes about two minutes.</p>
+      <ul>
+        <li>Your name, institution and role</li>
+        <li>The instruments and setups you work with</li>
+        <li>What you would want STREAM to model, and anything that looks wrong</li>
+      </ul>
+    </div>
+    <a class="btn primary" id="fb-link" href="#" target="_blank" rel="noopener">Give feedback</a>
+  </section>
+
+  <footer>Prototype physics engine runs in your browser. Built-in models are implementations of the cited papers and have not yet been reviewed against experiments. Clarkson University · Center for Air and Aquatic Engineering and Science.
+    <span class="privacy">This site counts visits and feature use with GoatCounter, which uses no cookies and collects no personal information. Feedback you choose to send, including your name, goes only to the STREAM team at Clarkson University.</span></footer>
 </div>
 
 <script type="text/plain" id="engine-src">// engine.js — STREAM physics engine (JavaScript port of stream.py, with selectable models).
@@ -994,6 +1021,41 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
 })(typeof self !== "undefined" ? self : this);
 </script>
 <script>
+// ---- Site settings: edit these two lines ----
+window.STREAM_SITE = {
+  goatcounter: "stream-airlab",   // GoatCounter site code (stream-airlab.goatcounter.com)
+  feedbackUrl: "",                // Link to the Google Form; while empty, feedback opens an email instead
+  feedbackEmail: "sdhaniya@clarkson.edu",
+};
+// Visit and feature counting, only on the public site (no cookies, no personal data)
+(function () {
+  const cfg = window.STREAM_SITE, onPublicSite = /github\.io$/.test(location.hostname) || /stream/i.test(location.hostname);
+  const queue = [];
+  window.streamTrack = function (name) {
+    if (!onPublicSite || !cfg.goatcounter) return;
+    const ev = { path: name, title: name, event: true };
+    if (window.goatcounter && window.goatcounter.count) window.goatcounter.count(ev); else queue.push(ev);
+  };
+  if (onPublicSite && cfg.goatcounter) {
+    const sc = document.createElement("script");
+    sc.async = true; sc.src = "https://gc.zgo.at/count.js";
+    sc.setAttribute("data-goatcounter", "https://" + cfg.goatcounter + ".goatcounter.com/count");
+    sc.onload = function () { const t = setInterval(function () { if (window.goatcounter && window.goatcounter.count) { clearInterval(t); queue.splice(0).forEach(function (e) { window.goatcounter.count(e); }); } }, 300); setTimeout(function () { clearInterval(t); }, 10000); };
+    document.head.appendChild(sc);
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    const a = document.getElementById("fb-link"); if (!a) return;
+    if (cfg.feedbackUrl) a.href = cfg.feedbackUrl;
+    else {
+      const body = "Name:\nInstitution:\nRole (student, researcher, instrument developer, ...):\nInstruments and setups you work with:\nHow you would use STREAM:\nWhat STREAM should model next:\nAnything that looks wrong or confusing:\n";
+      a.href = "mailto:" + cfg.feedbackEmail + "?subject=" + encodeURIComponent("STREAM feedback") + "&body=" + encodeURIComponent(body);
+      a.removeAttribute("target");
+    }
+    a.addEventListener("click", function () { window.streamTrack("feedback-click"); });
+  });
+})();
+</script>
+<script>
 (function () {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -1203,7 +1265,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
       setTimeout(() => { try { done(runInline(job)); } catch (err) { fail(err.message); } }, 20);
     }
   }
-  $("run").addEventListener("click", go);
+  $("run").addEventListener("click", () => { window.streamTrack && window.streamTrack("run-simulation"); go(); });
   const DIAGRAM_FIELDS = new Set(["lineL", "lineD", "lineB", "dil", "dryOn", "dryRH", "dryL", "dryD", "apsOn", "rhsrc"]);
   function dropDiagram(e) {
     if (state.diagram && e && e.target && DIAGRAM_FIELDS.has(e.target.id)) { state.diagram = null; showDiagramNote(); }
@@ -1818,7 +1880,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
     $("dg-applymsg").textContent = "Applied. The setup fields and results below now follow this diagram."; $("dg-applymsg").className = "formmsg ok";
     return true;
   }
-  $("dg-apply").addEventListener("click", () => applyGraph());
+  $("dg-apply").addEventListener("click", () => { window.streamTrack && window.streamTrack("diagram-apply"); applyGraph(); });
 
   function setSource(t) { st.source = t; $("dg-src").textContent = t; }
   function loadGraph(g, source, aerosol, apply) {
@@ -1830,6 +1892,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
   $("dg-templates").addEventListener("click", (e) => {
     const b = e.target.closest(".dg-card"); if (!b) return;
     const t = TEMPLATES.find((x) => x.key === b.dataset.key); st.templateKey = t.key;
+    window.streamTrack && window.streamTrack("template-" + t.key);
     loadGraph(t.build(), "Template · " + t.name, t.aerosol || [[3000, 40e-9, 1.6], [1500, 150e-9, 1.5], [5, 1.5e-6, 1.8]], true);
   });
 
@@ -1843,6 +1906,7 @@ footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--ru
   async function takeFile(f) {
     if (!/^image\/(png|jpeg|webp|gif)$/.test(f.type)) { showRead("That file type isn't supported. Export the schematic as PNG or JPEG, then upload it.", true); $("dg-image-box").hidden = false; return; }
     imageBlob = f; st.imageName = f.name;
+    window.streamTrack && window.streamTrack("schematic-upload");
     st.image = await shrink(f);
     $("dg-img").src = st.image; $("dg-image-box").hidden = false; $("dg-trace-wrap").hidden = false;
     showRead(sample ? "Check that the image is clear, then select Read with Claude." : "Reading needs Claude, which isn't available in this view. Build the diagram by hand with the schematic as a guide.", !sample);
