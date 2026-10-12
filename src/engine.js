@@ -343,6 +343,7 @@
         const w = wetState(cfg, p, d[i], pr.rh, g.T); x[i] = w.d;
         let v = S.linePen(cfg, ph, d[i], segs);
         if (cut) v *= cfg.impactor === "geometric" ? 1 / (1 + Math.pow(w.d / p.impactor_d50, p.impactor_slope)) : 1 / (1 + Math.pow(aeroFromWet(ph, w.d, w.rho, ph.chi) / cut, p.impactor_slope));
+        if (pr.factor) v *= pr.factor[i];
         if (Zs) {
           if (pr.dmaLoss && cfg.dma_loss === "gk_leff") v *= clamp(diffPen(ph.diffusivity(w.d), p.dma_Leff, p.qa), 0, 1);
           const sig = cfg.dma_tf === "stolzenburg1988" ? Math.sqrt(Gf * 2 * Math.PI * p.L * ph.diffusivity(w.d) / p.qsh) : null;

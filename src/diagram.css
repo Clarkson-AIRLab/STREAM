@@ -65,3 +65,10 @@
 #dg-tf-body[hidden], #dg-tfg[hidden] { display: none; }
 #dg-tfg { display: grid; gap: 8px; }
 .dg-tfnotes { margin: 0; padding-left: 1.2em; color: var(--ink-2); font-size: 0.84rem; display: grid; gap: 4px; }
+.dg-io { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.filebtn { position: relative; display: inline-flex; align-items: center; font: 500 0.74rem/1 var(--f-body); border-radius: 4px; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); padding: 4px 8px; cursor: pointer; }
+.filebtn:hover, .filebtn:focus-within { border-color: var(--accent); }
+.filebtn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.dg-fmt { font-size: 0.74rem; color: var(--ink-3); max-width: 90ch; }
+.dg-pstats .st.cmp { border-color: var(--s-mc); }
+#dg-probe-v[hidden], .dg-io [hidden] { display: none; }

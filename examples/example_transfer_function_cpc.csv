@@ -1,0 +1,14 @@
+# Synthetic example of a measured CPC counting efficiency (not real data). Upload in the Transfer function panel of a CPC block.
+Dp (nm),efficiency (%)
+3,0.0
+4,0.0
+5,10.9
+6,20.6
+8,37.0
+10,50.0
+12,60.3
+15,71.9
+20,84.3
+30,95.0
+50,99.5
+100,100.0

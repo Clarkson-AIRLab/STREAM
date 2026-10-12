@@ -483,7 +483,7 @@ Rules:
     const m = $("dg-savemsg"), name = $("dg-name").value.trim();
     if (!db) { m.textContent = "Saving needs a signed-in claude.ai view."; m.className = "formmsg err"; return; }
     if (!name) { m.textContent = "Give the setup a name."; m.className = "formmsg err"; return; }
-    const graph = { nodes: st.graph.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, x: Math.round(n.x), y: Math.round(n.y), params: n.params })), edges: st.graph.edges };
+    const graph = { nodes: st.graph.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, x: Math.round(n.x), y: Math.round(n.y), params: n.params, userTF: n.userTF || null, exp: n.exp || null })), edges: st.graph.edges.map((e) => Object.assign({}, e, { userTF: e.userTF || null, exp: e.exp || null })) };
     try {
       await db.collection("setups").add({ name: name.slice(0, 80), graph, image: st.image || null, by: me || "", at: new Date().toISOString() });
       m.textContent = "Saved to the shared library."; m.className = "formmsg ok"; $("dg-name").value = "";
@@ -545,26 +545,31 @@ Rules:
     const truth = Object.assign({}, UI.state.cfg.truth);
     if (imp && truth.impactor === "none") truth.impactor = +imp.params.nozzle_mm ? "stk50" : "logistic";
     if (imp && truth.impactor === "stk50" && !+imp.params.nozzle_mm) truth.impactor = "logistic";
-    let r;
+    let r, uf = null;
     try {
+      uf = uploadFactor(path, skipLast, edgeQ, params, truth, V, job);
       r = UI.engine().probe({ params, modes: job.modes, truth, custom: job.custom,
-        probe: { segments: seg.segs, rh: seg.rh, dil: seg.dil, impactor: !!imp, neutralized: neu, dmaV: V, cpc: cpcAfter, dmaLoss: true } });
+        probe: { segments: seg.segs, rh: seg.rh, dil: seg.dil, impactor: !!imp, neutralized: neu, dmaV: V, cpc: cpcAfter, dmaLoss: true, factor: uf ? Array.from(uf.f) : null } });
     } catch (err) { return hide("The probe couldn't be computed for this point."); }
     body.hidden = false; empty.hidden = true;
     try { runTF({ sel, path, edgeQ, job, params, truth, V }); } catch (err) { tfHide("The transfer function couldn't be computed for this block."); }
-    drawProbe(r, { seg, imp, neu, dmaNode, cpcAfter, lastQ: path.edges.length ? edgeQ.get(path.edges[path.edges.length - 1].id) : null });
+    drawProbe(r, { title, uf, item: selectedItem(), V, seg, imp, neu, dmaNode, cpcAfter, lastQ: path.edges.length ? edgeQ.get(path.edges[path.edges.length - 1].id) : null });
   }
   function drawProbe(r, ctx) {
     const LN10 = Math.LN10;
     const xs = r.x.map((v) => v * 1e9), ds = r.d.map((v) => v * 1e9);
     const src = r.src.map((v) => v * LN10), here = r.here.map((v) => v * LN10), single = r.single ? r.single.map((v) => v * LN10) : null;
-    const ymax = Math.max(...src, ...here) * 2 || 1, ymin = Math.max(ymax / 1e6, 1e-4);
+    const exy = ctx.item && ctx.item.exp ? ctx.item.exp.y.filter((v) => v > 0) : [];
+    const ymax = Math.max(...src, ...here, ...exy) * 2 || 1, ymin = Math.max(ymax / 1e6, 1e-4);
     const decades = []; for (let e = Math.ceil(Math.log10(ymin)); e <= Math.floor(Math.log10(ymax)); e++) decades.push(Math.pow(10, e));
     const series = [
       { name: "At the source (dry)", x: ds, y: src, color: "var(--s-truth)", width: 1.25, dash: true, at: (v) => UI.interpLog(ds, src, v) },
       { name: ctx.dmaNode ? "Leaving the DMA, all charges" : "At this point", x: xs, y: here, color: "var(--s-b)", area: true, areaOpacity: 0.15, at: (v) => UI.interpLog(xs, here, v) },
     ];
     if (single) series.push({ name: "Singly charged only", x: xs, y: single, color: "var(--s-a)", dash: true, at: (v) => UI.interpLog(xs, single, v) });
+    const ex = ctx.item && ctx.item.exp;
+    if (ex) series.push({ name: `Measured: ${ex.name}`, x: ex.x, y: ex.y, color: "var(--s-mc)", width: 1.25, markers: ex.x.length <= 80, at: (v) => (v < ex.x[0] || v > ex.x[ex.x.length - 1]) ? NaN : UI.interpLog(ex.x, ex.y, v) });
+    $("dg-pexp-rm").hidden = !ex;
     UI.legend($("dg-plg"), series.map((s) => ({ name: s.name, color: s.color, cls: s.dash ? "dash" : "" })));
     UI.drawChart($("dg-pc"), {
       label: "Size distribution at the probed point",
@@ -585,82 +590,274 @@ Rules:
       + st(ctx.cpcAfter ? "CPC counts" : "Leaving the DMA", `${fmtN(r.dma.N)} cm⁻³`, `${pct(r.dma.Nsingle / (r.dma.N || 1))} singly charged`);
     else if (ctx.cpcAfter) h += st("CPC counts", `${fmtN(r.Nhere)} cm⁻³`, "total, no classifier upstream");
     if (r.charges) h += `<div class="st wide"><span>Charge state after the neutralizer (positive side)</span><div class="tblwrap"><table><thead><tr><th class="num">Diameter</th><th class="num">Neutral</th><th class="num">+1</th><th class="num">+2</th><th class="num">+3</th></tr></thead><tbody>${r.charges.map((c) => `<tr><td class="num">${c.d < 1e-6 ? Math.round(c.d * 1e9) + " nm" : (c.d * 1e6).toFixed(0) + " µm"}</td><td class="num">${pct(c.f0)}</td><td class="num">${pct(c.f1)}</td><td class="num">${pct(c.f2)}</td><td class="num">${pct(c.f3)}</td></tr>`).join("")}</tbody></table></div></div>`;
+    if (ex) {
+      // compare over the measured size range: number concentration and size-resolved ratio (model / measured)
+      const lo = ex.x[0], hi = ex.x[ex.x.length - 1];
+      const trap = (X, Y) => { let t = 0; for (let i = 1; i < X.length; i++) if (X[i - 1] >= lo && X[i] <= hi) t += 0.5 * (Y[i] + Y[i - 1]) * Math.log10(X[i] / X[i - 1]); return t; };
+      const Nm = trap(ex.x, ex.y), Ns = trap(xs, here);
+      const lr = ex.x.map((xv, i) => { const m = UI.interpLog(xs, here, xv); return m > 0 && ex.y[i] > 0 ? Math.log(m / ex.y[i]) : null; }).filter((v) => v != null);
+      const gmr = lr.length ? Math.exp(lr.reduce((a, b) => a + b, 0) / lr.length) : NaN;
+      const rms = lr.length ? Math.sqrt(lr.reduce((a, b) => a + b * b, 0) / lr.length) : NaN;
+      h += `<div class="st cmp"><span>Simulated ÷ measured, number</span><b>${isFinite(Ns / Nm) ? (Ns / Nm).toFixed(2) : "—"}</b><small>${fmtN(Ns)} vs ${fmtN(Nm)} cm⁻³, ${fmtD(lo)}–${fmtD(hi)}</small></div>`
+        + `<div class="st cmp"><span>Size-resolved ratio</span><b>×${isFinite(gmr) ? gmr.toFixed(2) : "—"}</b><small>geometric mean over ${lr.length} points; typical spread ×${isFinite(rms) ? Math.exp(rms).toFixed(2) : "—"}</small></div>`;
+    }
+    if (ctx.uf) h += `<div class="st wide cmp"><span>Uploaded transfer functions in use</span><b>${esc(ctx.uf.names.join(", "))}</b><small>Replacing the model for these blocks within their uploaded size ranges.</small></div>`;
     $("dg-pstats").innerHTML = h;
+    // keep for download
+    const cols = [["diameter_at_local_RH_nm", xs], ["dry_diameter_nm", ds], ["source_dry_dNdlogDp_cm-3", src], ["here_dNdlogDp_cm-3", here]];
+    if (single) cols.push(["here_singly_charged_dNdlogDp_cm-3", single]);
+    cols.push(["penetration_so_far", Array.from(r.pen)]);
+    if (ex) { cols.push(["measured_diameter_nm", ex.x], ["measured_dNdlogDp_cm-3", ex.y], ["simulated_at_measured_diameter", ex.x.map((xv) => UI.interpLog(xs, here, xv))]); }
+    const meta = [`RH at this point ${Math.round(ctx.seg.rh * 100)}%; number concentration here ${+r.Nhere.toPrecision(4)} cm-3 (${pct(r.Nhere / r.Nsrc)} of source)`];
+    if (r.cut) meta.push(`Impactor cut ${Math.round(r.cut * 1e9)} nm aerodynamic = ${Math.round(r.cutGeo * 1e9)} nm dry particle size`);
+    if (r.dma) meta.push(`DMA at ${ctx.V < 100 ? ctx.V.toFixed(1) : Math.round(ctx.V)} V selects ${Math.round(r.dma.d1 * 1e9)} nm singly charged`);
+    if (ctx.uf) meta.push(`Uploaded transfer functions in use: ${ctx.uf.names.join(", ")}`);
+    if (ex) meta.push(`Measured data: ${ex.name}`);
+    meta.push("Simulated columns have one row per size bin; measured columns, when present, have their own rows.");
+    lastProbe = { title: ctx.title, cols, meta };
   }
+  let lastProbe = null;
 
   // ------------------------------------------------------------ transfer function of the selected block
   function tfHide(msg) { $("dg-tf-body").hidden = true; const e = $("dg-tf-empty"); e.hidden = false; e.textContent = msg; $("dg-tf-title").textContent = "Transfer function"; }
-  function runTF(c) {
-    const g = st.graph, sel = c.sel;
-    const params = Object.assign({}, c.params), truth = Object.assign({}, c.truth);
-    let spec = null, title = "", extra = [];
-    if (sel.kind === "edge") {
-      const e = g.edges.find((x) => x.id === sel.id), a = g.nodes.find((x) => x.id === e.from), b = g.nodes.find((x) => x.id === e.to);
-      const n = c.path.edges.length, rhIn = segmentsAlong(c.path, n - 1, c.edgeQ, false).rh;
-      const Q = (c.edgeQ.get(e.id) || +e.flow_lpm || 1) / 60000;
-      title = `Transfer function of the tube ${a.label} → ${b.label}`;
+  // Builds the engine spec for one block or tube. `path` ends at the block (for a tube: at its downstream node).
+  function blockSpec(item, isEdge, path, edgeQ, baseParams, baseTruth, V) {
+    const g = st.graph, params = Object.assign({}, baseParams), truth = Object.assign({}, baseTruth), extra = [];
+    if (isEdge) {
+      const e = item, a = g.nodes.find((x) => x.id === e.from), b = g.nodes.find((x) => x.id === e.to);
+      const rhIn = segmentsAlong(path, path.edges.length - 1, edgeQ, false).rh, Q = (edgeQ.get(e.id) || +e.flow_lpm || 1) / 60000;
       if (!(+e.length_m > 0)) extra.push("This connection has no tubing length set, so it passes every size. Set a length in the panel on the right.");
       if (+e.length_m > 0 && !+e.id_mm) extra.push("Inner diameter not set; 4.6 mm assumed.");
-      spec = { kind: "tube", L: +e.length_m || 0, D: (+e.id_mm || 4.6) * 1e-3, Q, bends: +e.bends || 0, rh: rhIn };
-    } else {
-      const n = g.nodes.find((x) => x.id === sel.id), T = TYPES[n.type] || TYPES.other, np = n.params;
-      const k = c.path.nodes.indexOf(n), eIn = k > 0 ? c.path.edges[k - 1] : null;
-      const rhIn = segmentsAlong(c.path, c.path.edges.length, c.edgeQ, true).rh;
-      const Qin = eIn && c.edgeQ.get(eIn.id) ? c.edgeQ.get(eIn.id) / 60000 : null;
-      title = `Transfer function of ${n.label}`;
-      if (n.type === "source") return tfHide("The aerosol source has no transfer function. Select a block downstream of it or a tube.");
-      if (T.sim === "pass") return tfHide(`${n.label}: modeled as passing every size unchanged for now, so its transfer function is 1 at all sizes.`);
-      if (T.sim === "no") return tfHide(`${n.label} is not simulated yet, so STREAM has no transfer function for it.`);
-      if (n.type === "impactor" || n.type === "cyclone") {
-        params.impactor_d50 = (+np.d50_nm || 700) * 1e-9; params.impactor_slope = +np.steepness || 8;
-        params.impactor_W = n.type === "impactor" && +np.nozzle_mm ? +np.nozzle_mm * 1e-3 : null;
-        if (!params.impactor_W) delete params.impactor_W;
-        params.impactor_Q = Qin || params.qa;
-        if (truth.impactor === "none") truth.impactor = params.impactor_W ? "stk50" : "logistic";
-        if (truth.impactor === "stk50" && !params.impactor_W) truth.impactor = "logistic";
-        spec = { kind: "impactor", rh: rhIn };
-      } else if (n.type === "neutralizer") spec = { kind: "neutralizer", rh: rhIn };
-      else if (n.type === "dma") spec = { kind: "dma", V: c.V, rh: rhIn };
-      else if (n.type === "cpc") {
-        Object.assign(params, { cpc_d50: (+np.d50_nm || 7) * 1e-9, cpc_d0: (+np.d0_nm || 3) * 1e-9, cpc_tau: +np.tau_s || 0.6 });
-        if (params.cpc_d0 >= params.cpc_d50) params.cpc_d0 = params.cpc_d50 * 0.5;
-        spec = { kind: "cpc", rh: rhIn };
-      } else if (n.type === "aps") spec = { kind: "aps", Q: (+np.flow_lpm || 1) / 60000, t: +np.sample_s || 20, d50lo: (+np.d50_lo_um || 0.6) * 1e-6, cut: (+np.cut_um || 15) * 1e-6, res: +np.res || 1.05, rh: rhIn };
-      else if (n.type === "diluter") spec = { kind: "diluter", factor: Math.max(1, +np.factor || 1), rh: rhIn };
-      else if (n.type === "dryer") {
-        spec = { kind: "dryer", L: +np.length_m || 0, D: (+np.id_mm || 10) * 1e-3, Q: Qin || params.qa, rhIn, rhOut: Math.min(rhIn, (+np.rh_out_pct || 0) / 100), rh: rhIn };
-        if ((+np.rh_out_pct || 0) / 100 > rhIn) extra.push(`The air entering is already drier (${Math.round(rhIn * 100)}% RH) than the dryer's outlet setting, so the dryer does not change the humidity.`);
-      } else return tfHide(`${n.label} has no transfer function yet.`);
+      return { title: `Transfer function of the tube ${a.label} → ${b.label}`, params, truth, extra, replaceable: true,
+        spec: { kind: "tube", L: +e.length_m || 0, D: (+e.id_mm || 4.6) * 1e-3, Q, bends: +e.bends || 0, rh: rhIn } };
     }
-    const r = UI.engine().blockResponse({ params, truth, custom: c.job.custom, block: spec });
-    $("dg-tf-title").textContent = title;
+    const n = item, T = TYPES[n.type] || TYPES.other, np = n.params;
+    const k = path.nodes.indexOf(n), eIn = k > 0 ? path.edges[k - 1] : null;
+    const rhIn = segmentsAlong(path, path.edges.length, edgeQ, true).rh;
+    const Qin = eIn && edgeQ.get(eIn.id) ? edgeQ.get(eIn.id) / 60000 : null;
+    const out = { title: `Transfer function of ${n.label}`, params, truth, extra, replaceable: true };
+    if (n.type === "source") return { msg: "The aerosol source has no transfer function. Select a block downstream of it or a tube." };
+    if (T.sim === "pass") return { msg: `${n.label}: modeled as passing every size unchanged for now, so its transfer function is 1 at all sizes.`, uploadOK: true, title: out.title };
+    if (T.sim === "no") return { msg: `${n.label} is not simulated yet, so STREAM has no transfer function for it. You can upload a measured one and use it when probing.`, uploadOK: true, title: out.title };
+    if (n.type === "impactor" || n.type === "cyclone") {
+      params.impactor_d50 = (+np.d50_nm || 700) * 1e-9; params.impactor_slope = +np.steepness || 8;
+      if (n.type === "impactor" && +np.nozzle_mm) params.impactor_W = +np.nozzle_mm * 1e-3; else delete params.impactor_W;
+      params.impactor_Q = Qin || params.qa;
+      if (truth.impactor === "none") truth.impactor = params.impactor_W ? "stk50" : "logistic";
+      if (truth.impactor === "stk50" && !params.impactor_W) truth.impactor = "logistic";
+      out.spec = { kind: "impactor", rh: rhIn };
+    } else if (n.type === "neutralizer") { out.spec = { kind: "neutralizer", rh: rhIn }; out.replaceable = false; }
+    else if (n.type === "dma") { out.spec = { kind: "dma", V, rh: rhIn }; out.replaceable = false; }
+    else if (n.type === "cpc") {
+      Object.assign(params, { cpc_d50: (+np.d50_nm || 7) * 1e-9, cpc_d0: (+np.d0_nm || 3) * 1e-9, cpc_tau: +np.tau_s || 0.6 });
+      if (params.cpc_d0 >= params.cpc_d50) params.cpc_d0 = params.cpc_d50 * 0.5;
+      out.spec = { kind: "cpc", rh: rhIn };
+    } else if (n.type === "aps") out.spec = { kind: "aps", Q: (+np.flow_lpm || 1) / 60000, t: +np.sample_s || 20, d50lo: (+np.d50_lo_um || 0.6) * 1e-6, cut: (+np.cut_um || 15) * 1e-6, res: +np.res || 1.05, rh: rhIn };
+    else if (n.type === "diluter") out.spec = { kind: "diluter", factor: Math.max(1, +np.factor || 1), rh: rhIn };
+    else if (n.type === "dryer") {
+      out.spec = { kind: "dryer", L: +np.length_m || 0, D: (+np.id_mm || 10) * 1e-3, Q: Qin || params.qa, rhIn, rhOut: Math.min(rhIn, (+np.rh_out_pct || 0) / 100), rh: rhIn };
+      if ((+np.rh_out_pct || 0) / 100 > rhIn) extra.push(`The air entering is already drier (${Math.round(rhIn * 100)}% RH) than the dryer's outlet setting, so the dryer does not change the humidity.`);
+    } else return { msg: `${n.label} has no transfer function yet.`, uploadOK: true, title: out.title };
+    return out;
+  }
+  // What the probe already applies for this block (so an uploaded curve can replace it): the main curve, except
+  // where the probe does not apply the model (APS efficiency, CPC curves other than exp_d50, pass-through blocks).
+  function builtinApplied(item, isEdge, bs, job) {
+    if (bs.msg) return null;
+    if (!isEdge && item.type === "aps") return null;
+    if (!isEdge && item.type === "cpc" && bs.truth.cpc_eff !== "exp_d50") return null;
+    const r = UI.engine().blockResponse({ params: bs.params, truth: bs.truth, custom: job.custom, block: bs.spec });
+    return (r.series.find((s) => s.main) || r.series[0]).y;
+  }
+  // Uploaded curve on the engine's dry-size grid (nm). Outside the uploaded range returns null.
+  function onGrid(u, xs) {
+    const lx = u.x.map(Math.log);
+    return xs.map((v) => {
+      if (v < u.x[0] || v > u.x[u.x.length - 1]) return null;
+      const t = Math.log(v); let i = 1; while (i < lx.length - 1 && lx[i] < t) i++;
+      const f = lx[i] === lx[i - 1] ? 0 : (t - lx[i - 1]) / (lx[i] - lx[i - 1]);
+      return u.y[i - 1] + f * (u.y[i] - u.y[i - 1]);
+    });
+  }
+  // Product over the blocks on the probed path whose uploaded curve is switched on: uploaded / model.
+  function uploadFactor(path, skipLast, edgeQ, baseParams, baseTruth, V, job) {
+    const users = [];
+    path.edges.forEach((e, j) => { if (e.userTF && e.userTF.use) users.push({ item: e, isEdge: true, sub: { nodes: path.nodes.slice(0, j + 2), edges: path.edges.slice(0, j + 1) } }); });
+    path.nodes.forEach((n, k) => { if (skipLast && k === path.nodes.length - 1) return; if (n.userTF && n.userTF.use) users.push({ item: n, isEdge: false, sub: { nodes: path.nodes.slice(0, k + 1), edges: path.edges.slice(0, k) } }); });
+    if (!users.length) return null;
+    const xs = gridNm();
+    const f = new Float64Array(xs.length).fill(1), names = [];
+    users.forEach((u) => {
+      const bs = blockSpec(u.item, u.isEdge, u.sub, edgeQ, baseParams, baseTruth, V);
+      if (bs.replaceable === false) return;
+      const base = builtinApplied(u.item, u.isEdge, bs, job), up = onGrid(u.item.userTF, xs);
+      names.push(u.isEdge ? "a tube" : u.item.label);
+      for (let i = 0; i < xs.length; i++) {
+        if (up[i] == null) continue;
+        const m = base ? base[i] : 1;
+        f[i] *= m > 1e-9 ? Math.max(0, up[i]) / m : 0;
+      }
+    });
+    return names.length ? { f, names } : null;
+  }
+  let GRID = null;
+  function gridNm() { if (!GRID) { const r = UI.engine().blockResponse({ params: UI.readJob().params, truth: UI.state.cfg.truth, custom: {}, block: { kind: "diluter", factor: 1 } }); GRID = r.x; } return GRID; }
+
+  let lastTF = null;
+  function selectedItem() {
+    const s = st.sel; if (!s) return null;
+    return s.kind === "node" ? st.graph.nodes.find((x) => x.id === s.id) : st.graph.edges.find((x) => x.id === s.id);
+  }
+  function runTF(c) {
+    const isEdge = c.sel.kind === "edge", item = selectedItem();
+    const bs = blockSpec(item, isEdge, c.path, c.edgeQ, c.params, c.truth, c.V);
+    lastTF = null;
+    tfControls(item, bs);
+    if (bs.msg) {
+      if (item.userTF) { $("dg-tf-title").textContent = bs.title; $("dg-tf-empty").hidden = false; $("dg-tf-empty").textContent = bs.msg; $("dg-tf-body").hidden = false; drawTF(null, [], null, item); return; }
+      tfHide(bs.msg); if (bs.uploadOK) { $("dg-tf-title").textContent = bs.title; $("dg-tf-body").hidden = false; $("dg-tflg").innerHTML = ""; $("dg-tfc").innerHTML = ""; $("dg-tfg").hidden = true; $("dg-tfnotes").innerHTML = ""; }
+      return;
+    }
+    const r = UI.engine().blockResponse({ params: bs.params, truth: bs.truth, custom: c.job.custom, block: bs.spec });
+    $("dg-tf-title").textContent = bs.title;
     $("dg-tf-empty").hidden = true; $("dg-tf-body").hidden = false;
-    drawTF(r, extra, spec);
+    drawTF(r, bs.extra, bs.spec, item);
+  }
+  function tfControls(item, bs) {
+    const has = !!(item && item.userTF);
+    $("dg-tfrm").hidden = !has;
+    $("dg-tfuse-wrap").hidden = !has || bs.replaceable === false;
+    $("dg-tfuse").checked = has && !!item.userTF.use;
+    $("dg-tfdl").hidden = !!bs.msg && !has;
+    if (!has) { $("dg-tfmsg").textContent = ""; }
+    else if (bs.replaceable === false) $("dg-tfmsg").textContent = `Uploaded: ${item.userTF.name} (shown for comparison; the probe keeps the model for this block).`;
+    else $("dg-tfmsg").textContent = `Uploaded: ${item.userTF.name}`;
+    $("dg-tfmsg").className = "formmsg";
   }
   const TF_COLORS = ["var(--s-b)", "var(--s-a)", "var(--s-mc)", "var(--s-truth)", "var(--ink-3)"];
-  function drawTF(r, extra, spec) {
-    const xs = r.x, pctf = (v) => isFinite(v) ? (v >= 0.995 ? "100%" : v < 0.001 && v > 0 ? "<0.1%" : `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`) : "—";
-    const series = r.series.map((s, i) => ({ name: s.name, x: xs, y: Array.from(s.y), color: TF_COLORS[i % TF_COLORS.length], dash: !s.main && i > 0, width: s.main ? 2.25 : 1.5, at: (v) => UI.interpLog(xs, Array.from(s.y), v) }));
+  const fmtD = (v) => v < 1000 ? v.toFixed(v < 10 ? 1 : 0) + " nm" : (v / 1000).toFixed(2) + " µm";
+  function drawTF(r, extra, spec, item) {
+    const pctf = (v) => isFinite(v) ? (v >= 0.995 && v <= 1.005 ? "100%" : v < 0.001 && v > 0 ? "<0.1%" : `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`) : "—";
+    const xs = r ? r.x : gridNm();
+    const series = r ? r.series.map((s, i) => ({ name: s.name, x: xs, y: Array.from(s.y), color: TF_COLORS[i % TF_COLORS.length], dash: !s.main && i > 0, width: s.main ? 2.25 : 1.5, at: (v) => UI.interpLog(xs, Array.from(s.y), v) })) : [];
+    const u = item && item.userTF;
+    if (u) series.push({ name: `Uploaded: ${u.name}`, x: u.x, y: u.y, color: "var(--s-truth)", width: 1.25, markers: u.x.length <= 60, at: (v) => (v < u.x[0] || v > u.x[u.x.length - 1]) ? NaN : UI.interpLog(u.x, u.y, v) });
     UI.legend($("dg-tflg"), series.map((s) => ({ name: s.name, color: s.color, cls: s.dash ? "dash" : "" })));
-    const yMax = r.yMax || 1.05;
+    const yMax = Math.max(r ? r.yMax || 1.05 : 1.05, u ? Math.max(...u.y) * 1.05 : 0);
+    const yLabel = r ? r.yLabel : "Fraction";
     UI.drawChart($("dg-tfc"), {
-      label: `${r.yLabel} against particle size`,
-      x: { domain: [1, 20000], log: true, ticks: [1, 10, 100, 1000, 10000], title: spec.kind === "aps" || spec.kind === "impactor" ? "Dry particle size (nm); dashed: aerodynamic diameter" : "Dry particle size (nm)", fmt: (v) => v < 1000 ? v.toFixed(v < 10 ? 1 : 0) + " nm" : (v / 1000).toFixed(2) + " µm" },
-      y: { domain: [0, yMax], log: false, ticks: UI.niceTicks(0, Math.min(yMax, 1), 5), title: r.yLabel, fmtv: pctf },
+      label: `${yLabel} against particle size`,
+      x: { domain: [1, 20000], log: true, ticks: [1, 10, 100, 1000, 10000], title: spec && (spec.kind === "aps" || spec.kind === "impactor") ? "Dry particle size (nm); dashed: aerodynamic diameter" : "Dry particle size (nm)", fmt: fmtD },
+      y: { domain: [0, yMax], log: false, ticks: UI.niceTicks(0, Math.min(yMax, Math.max(1, yMax / 1.05)), 5), title: yLabel, fmtv: pctf },
       series,
     });
-    if (r.growth) {
+    let gi = null, go = null;
+    if (r && r.growth) {
       $("dg-tfg").hidden = false;
-      const gi = Array.from(r.growth.yIn), go = Array.from(r.growth.yOut), gmax = Math.max(...gi, ...go, 1.1) * 1.05;
+      gi = Array.from(r.growth.yIn); go = Array.from(r.growth.yOut);
+      const gmax = Math.max(...gi, ...go, 1.1) * 1.05;
       const gs = [{ name: `Entering, ${Math.round(r.growth.rhIn * 100)}% RH`, x: xs, y: gi, color: "var(--s-a)", dash: true, at: (v) => UI.interpLog(xs, gi, v) },
         { name: `Leaving, ${Math.round(r.growth.rhOut * 100)}% RH`, x: xs, y: go, color: "var(--s-b)", at: (v) => UI.interpLog(xs, go, v) }];
       UI.legend($("dg-tfglg"), gs.map((s) => ({ name: s.name, color: s.color, cls: s.dash ? "dash" : "" })));
       UI.drawChart($("dg-tfgc"), { label: "Hygroscopic growth factor entering and leaving the dryer",
-        x: { domain: [1, 20000], log: true, ticks: [1, 10, 100, 1000, 10000], title: "Dry particle size (nm)", fmt: (v) => v < 1000 ? v.toFixed(v < 10 ? 1 : 0) + " nm" : (v / 1000).toFixed(2) + " µm" },
+        x: { domain: [1, 20000], log: true, ticks: [1, 10, 100, 1000, 10000], title: "Dry particle size (nm)", fmt: fmtD },
         y: { domain: [1, gmax], log: false, ticks: UI.niceTicks(1, gmax, 4), title: "Growth factor (wet / dry size)", fmtv: (v) => "×" + v.toFixed(2) }, series: gs });
     } else $("dg-tfg").hidden = true;
-    $("dg-tfnotes").innerHTML = r.notes.concat(extra).map((t) => `<li>${esc(t)}</li>`).join("") + `<li>Curves use the Truth column of the model ledger. Change a model there to see how the block's response changes.</li>`;
+    const notes = r ? r.notes.concat(extra) : [];
+    if (u && u.use) notes.push("The uploaded curve replaces the model for this block when you probe at or after it. Outside its size range the model is used.");
+    if (r) notes.push("Curves use the Truth column of the model ledger. Change a model there to see how the block's response changes.");
+    $("dg-tfnotes").innerHTML = notes.map((t) => `<li>${esc(t)}</li>`).join("");
+    // keep for download
+    const cols = [["dry_diameter_nm", xs]];
+    if (r) r.series.forEach((s) => cols.push([s.name, Array.from(s.y)]));
+    if (gi) { cols.push([`growth_factor_in_${Math.round(r.growth.rhIn * 100)}pctRH`, gi], [`growth_factor_out_${Math.round(r.growth.rhOut * 100)}pctRH`, go]); }
+    if (u) { const ug = onGrid(u, xs); cols.push([`uploaded_${u.name}`, ug]); }
+    lastTF = { title: $("dg-tf-title").textContent, cols, notes, yLabel };
   }
+
+  // ------------------------------------------------------------ CSV in and out
+  function csvCell(v) { if (v == null || (typeof v === "number" && !isFinite(v))) return ""; if (typeof v === "number") return +v.toPrecision(6) + ""; const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+  function toCSV(meta, cols) {
+    const head = meta.map((m) => "# " + m.replace(/\n/g, " ")).join("\n");
+    const n = Math.max(...cols.map((c) => c[1].length));
+    const rows = [cols.map((c) => csvCell(c[0])).join(",")];
+    for (let i = 0; i < n; i++) rows.push(cols.map((c) => csvCell(c[1][i])).join(","));
+    return head + "\n" + rows.join("\n") + "\n";
+  }
+  function slug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "stream"; }
+  function download(name, text) {
+    const blob = new Blob([text], { type: "text/csv;charset=utf-8" }), url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  }
+  function setupMeta() {
+    const when = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+    const t = UI.state.cfg.truth, models = Object.entries(t).map(([k, v]) => `${k}=${v}`).join("; ");
+    return [`STREAM (Simulator of Train Response for Evaluating Aerosol Measurements), unvalidated prototype`, `Exported ${when} from ${location.href.split("#")[0]}`, `Setup: ${st.source || "diagram"}`, `Truth models: ${models}`];
+  }
+  // Parses two numeric columns. Returns {x (nm, ascending), y, notes[]}.
+  function parseTwoCol(text, kind) {
+    const lines = text.split(/\r?\n/), x = [], y = [], notes = [];
+    let um = false, pct = false, header = "";
+    for (const raw of lines) {
+      const line = raw.trim(); if (!line || line.startsWith("#")) continue;
+      const parts = line.split(/[,;\t]|\s+/).map((v) => v.trim()).filter((v) => v !== "");
+      const a = parseFloat(parts[0]), b = parseFloat(parts[1]);
+      if (parts.length < 2 || !isFinite(a) || !isFinite(b)) { if (!x.length) header += " " + line.toLowerCase(); continue; }
+      x.push(a); y.push(b);
+    }
+    if (x.length < 3) throw new Error("Couldn't find at least three rows with two numbers (diameter, value).");
+    const hx = header.split(/[,;\t]/)[0] || header;
+    if (/µm|um\b|micro/.test(hx)) { um = true; }
+    if (kind === "tf" && /%|percent/.test(header)) pct = true;
+    let pts = x.map((v, i) => [um ? v * 1000 : v, y[i]]).filter((p) => p[0] > 0).sort((p, q) => p[0] - q[0]);
+    pts = pts.filter((p, i) => i === 0 || p[0] !== pts[i - 1][0]);
+    if (!um && pts[pts.length - 1][0] < 50 && kind === "dist") notes.push("Diameters look small for nanometres; if they are micrometres, add µm to the header.");
+    let ys = pts.map((p) => p[1]);
+    if (kind === "tf") {
+      const mx = Math.max(...ys);
+      if (!pct && mx > 1.5 && mx <= 100.5) pct = true;
+      if (pct) { ys = ys.map((v) => v / 100); notes.push("Values read as percent."); }
+      if (Math.min(...ys) < 0) notes.push("Negative values set to zero when probing.");
+    }
+    if (um) notes.push("Diameters read as µm.");
+    return { x: pts.map((p) => p[0]), y: ys, notes };
+  }
+  $("dg-tfdl").addEventListener("click", () => {
+    if (!lastTF) return;
+    download(`stream-tf-${slug(lastTF.title.replace(/^Transfer function of /, ""))}.csv`, toCSV(setupMeta().concat([lastTF.title, `Values: ${lastTF.yLabel}; x is dry particle size`], lastTF.notes), lastTF.cols));
+    if (window.streamTrack) window.streamTrack("download-tf");
+  });
+  $("dg-tfup").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0]; ev.target.value = ""; const item = selectedItem(); if (!f || !item) return;
+    try {
+      const p = parseTwoCol(await f.text(), "tf");
+      item.userTF = { name: f.name.replace(/\.[^.]+$/, "").slice(0, 60), x: p.x, y: p.y, use: false };
+      changedData(); runProbe();
+      $("dg-tfmsg").textContent = `Uploaded ${p.x.length} points from ${f.name}.${p.notes.length ? " " + p.notes.join(" ") : ""}`; $("dg-tfmsg").className = "formmsg ok";
+      if (window.streamTrack) window.streamTrack("upload-tf");
+    } catch (err) { $("dg-tfmsg").textContent = err.message; $("dg-tfmsg").className = "formmsg err"; }
+  });
+  $("dg-tfuse").addEventListener("change", () => { const item = selectedItem(); if (item && item.userTF) { item.userTF.use = $("dg-tfuse").checked; changedData(); scheduleProbe(); } });
+  $("dg-tfrm").addEventListener("click", () => { const item = selectedItem(); if (item) { delete item.userTF; changedData(); scheduleProbe(); } });
+  $("dg-pexp").addEventListener("change", async (ev) => {
+    const f = ev.target.files[0]; ev.target.value = ""; const item = selectedItem(); if (!f || !item) return;
+    try {
+      const p = parseTwoCol(await f.text(), "dist");
+      item.exp = { name: f.name.replace(/\.[^.]+$/, "").slice(0, 60), x: p.x, y: p.y };
+      changedData(); runProbe();
+      $("dg-pmsg").textContent = `Loaded ${p.x.length} points from ${f.name}.${p.notes.length ? " " + p.notes.join(" ") : ""}`; $("dg-pmsg").className = "formmsg ok";
+      if (window.streamTrack) window.streamTrack("upload-measured");
+    } catch (err) { $("dg-pmsg").textContent = err.message; $("dg-pmsg").className = "formmsg err"; }
+  });
+  $("dg-pexp-rm").addEventListener("click", () => { const item = selectedItem(); if (item) { delete item.exp; $("dg-pmsg").textContent = ""; changedData(); runProbe(); } });
+  $("dg-pdl").addEventListener("click", () => {
+    if (!lastProbe) return;
+    download(`stream-probe-${slug(lastProbe.title.replace(/^Probe at (the )?/, ""))}.csv`, toCSV(setupMeta().concat([lastProbe.title], lastProbe.meta), lastProbe.cols));
+    if (window.streamTrack) window.streamTrack("download-probe");
+  });
+  // Uploaded data change the diagram's content but not its structure: mark it for saving without asking to re-apply.
+  function changedData() { st.dirty = true; }
   $("dg-pv").addEventListener("input", scheduleProbe);
   UI.onRun.push(scheduleProbe);
 

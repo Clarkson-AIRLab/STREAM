@@ -1,0 +1,13 @@
+# Synthetic example of a measured size distribution (not real data). Upload under a probe point.
+Dp (nm),dN/dlogDp (cm-3)
+10,93.49
+15,609.04
+20,1615.48
+30,3878.54
+40,5067.08
+50,5092.08
+70,3672.01
+100,1673.87
+150,395.86
+200,99.88
+300,8.71

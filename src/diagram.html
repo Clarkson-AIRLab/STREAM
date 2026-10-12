@@ -39,6 +39,13 @@
             <div class="legend" id="dg-plg"></div>
             <div class="chart" id="dg-pc"></div>
             <div class="dg-pstats" id="dg-pstats"></div>
+            <div class="dg-io">
+              <button type="button" class="small" id="dg-pdl">Download signal (CSV)</button>
+              <label class="small filebtn">Upload measured distribution<input type="file" id="dg-pexp" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+              <button type="button" class="small" id="dg-pexp-rm" hidden>Remove measured data</button>
+              <span class="formmsg" id="dg-pmsg"></span>
+            </div>
+            <p class="dg-fmt">Measured data: a CSV or text file with diameter (nm) in the first column and dN/dlogDp (cm⁻³) in the second, at this point's humidity. A header row is optional; write µm in the header if diameters are in micrometres. The data stay with this block and are saved with the setup.</p>
           </div>
         </div>
         <details class="dg-tf" id="dg-tf" open>
@@ -52,6 +59,14 @@
               <div class="chart" id="dg-tfgc"></div>
             </div>
             <ul class="dg-tfnotes" id="dg-tfnotes"></ul>
+            <div class="dg-io">
+              <button type="button" class="small" id="dg-tfdl">Download curves (CSV)</button>
+              <label class="small filebtn">Upload a transfer function<input type="file" id="dg-tfup" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+              <label class="chk" id="dg-tfuse-wrap" hidden><input type="checkbox" id="dg-tfuse"> Use the uploaded curve in place of the model when probing</label>
+              <button type="button" class="small" id="dg-tfrm" hidden>Remove uploaded curve</button>
+              <span class="formmsg" id="dg-tfmsg"></span>
+            </div>
+            <p class="dg-fmt">Uploaded transfer function: a CSV or text file with dry particle size (nm) in the first column and the fraction passed, counted or selected (0–1, or %) in the second. Outside the uploaded size range the model is used.</p>
           </div>
         </details>
       </div>
