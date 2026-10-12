@@ -1,0 +1,879 @@
+<title>STREAM Aerosol Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: lab-notebook instrument panel — setup train on top, results beside it, model ledger and community library below. */
+:root {
+  --bg: #F4F6F8;
+  --panel: #FFFFFF;
+  --ink: #17202A;
+  --ink-2: #4A5664;
+  --ink-3: #7A8592;
+  --rule: #D9DEE4;
+  --rule-2: #E8ECF0;
+  --accent: #1F5FA6;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E3EDF8;
+  --s-truth: #17202A;
+  --s-a: #C8642B;
+  --s-b: #2F6FB0;
+  --s-mc: #7A5BB5;
+  --ok: #2E7D4F;
+  --ok-soft: #E2F2E8;
+  --warn: #9A6A00;
+  --warn-soft: #FBF1DA;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --panel: #181C21; --ink: #E6EAEE; --ink-2: #AEB7C1; --ink-3: #7F8994;
+    --rule: #2E353D; --rule-2: #23292F; --accent: #6FA3E0; --accent-ink: #0E1216; --accent-soft: #1C2A3A;
+    --s-truth: #E6EAEE; --s-a: #D47235; --s-b: #4A8AD6; --s-mc: #9575D6;
+    --ok: #6CC08E; --ok-soft: #17291F; --warn: #E0B04A; --warn-soft: #2C2412;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --panel: #181C21; --ink: #E6EAEE; --ink-2: #AEB7C1; --ink-3: #7F8994;
+  --rule: #2E353D; --rule-2: #23292F; --accent: #6FA3E0; --accent-ink: #0E1216; --accent-soft: #1C2A3A;
+  --s-truth: #E6EAEE; --s-a: #D47235; --s-b: #4A8AD6; --s-mc: #9575D6;
+  --ok: #6CC08E; --ok-soft: #17291F; --warn: #E0B04A; --warn-soft: #2C2412;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 14px/1.5 var(--f-body); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 20px 48px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; margin: 0; text-wrap: balance; letter-spacing: 0.005em; }
+h1 { font-size: 1.9rem; line-height: 1.1; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1rem; }
+p { margin: 0; }
+.lede { color: var(--ink-2); max-width: 72ch; }
+.eyebrow { font: 500 0.72rem/1.2 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid var(--rule); padding-bottom: 16px; }
+header.top .t { display: grid; gap: 6px; min-width: 0; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font: 500 0.72rem/1 var(--f-mono); padding: 5px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--ink-2); background: var(--panel); white-space: nowrap; }
+.pill.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.pill.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.sec-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.sec { display: grid; gap: 14px; }
+
+/* setup train */
+.train { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; }
+form[hidden] { display: none; }
+.stage { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r); padding: 12px; display: grid; gap: 8px; align-content: start; position: relative; min-width: 0; }
+.stage .name { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.stage .name b { font: 600 0.95rem/1.2 var(--f-display); }
+.stage .name span { font: 500 0.68rem/1 var(--f-mono); color: var(--ink-3); }
+.fld { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; }
+.fld label { font-size: 0.8rem; color: var(--ink-2); }
+.fld label small { color: var(--ink-3); font-family: var(--f-mono); font-size: 0.7rem; }
+input[type=number], input[type=text], select, textarea {
+  font: 400 0.82rem/1.3 var(--f-mono); color: var(--ink); background: var(--bg);
+  border: 1px solid var(--rule); border-radius: 4px; padding: 5px 6px;
+}
+input[type=number] { width: 78px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type=text], textarea, select.wide { width: 100%; }
+textarea { min-height: 92px; resize: vertical; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.modes { display: grid; gap: 4px; }
+.modes .row { display: grid; grid-template-columns: 1.2em repeat(3, 1fr); gap: 4px; align-items: center; }
+.modes .row input { width: 100%; min-width: 0; padding: 4px 4px; font-size: 0.76rem; }
+.modes .hd { font: 500 0.66rem/1 var(--f-mono); color: var(--ink-3); text-align: right; }
+
+button { font: 500 0.82rem/1 var(--f-body); border-radius: 4px; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); padding: 7px 11px; cursor: pointer; }
+button:hover { border-color: var(--ink-3); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.small { padding: 4px 8px; font-size: 0.74rem; }
+button:disabled { opacity: 0.5; cursor: default; }
+.runbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.runbar .status { font: 400 0.8rem var(--f-mono); color: var(--ink-3); }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 0.82rem; color: var(--ink-2); }
+
+/* results */
+.results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r); padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.78rem; color: var(--ink-2); }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+.legend i.dash { border-top-style: dashed; }
+.legend i.fill { height: 10px; border: 0; border-radius: 2px; opacity: 0.35; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-family: var(--f-mono); font-size: 10.5px; fill: var(--ink-3); }
+.chart .grid { stroke: var(--rule-2); stroke-width: 1; }
+.chart .axis { stroke: var(--rule); stroke-width: 1; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; padding: 6px 8px; font: 400 0.74rem/1.45 var(--f-mono); color: var(--ink); box-shadow: 0 4px 14px rgba(0,0,0,0.12); white-space: nowrap; z-index: 2; }
+.tip b { font-weight: 500; }
+.tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+.tblwrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+th { font: 500 0.7rem/1.2 var(--f-mono); color: var(--ink-3); letter-spacing: 0.05em; text-transform: uppercase; }
+td.num, th.num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.sw2 { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 7px; vertical-align: -1px; }
+.delta { color: var(--ink-3); font-size: 0.74rem; }
+.note { font-size: 0.8rem; color: var(--ink-2); background: var(--rule-2); border-radius: 4px; padding: 9px 11px; max-width: 100ch; }
+
+/* model ledger */
+.ledger td:first-child { min-width: 190px; }
+.ledger select { width: 100%; min-width: 180px; }
+.ledger .comp b { display: block; font-weight: 500; }
+.ledger .comp span { font-size: 0.74rem; color: var(--ink-3); }
+.ledger th .presets { display: flex; gap: 4px; margin-top: 6px; text-transform: none; letter-spacing: 0; }
+.diff { background: var(--warn-soft); }
+.refs { display: grid; gap: 6px; padding-left: 1.6em; margin: 0; font-size: 0.82rem; color: var(--ink-2); }
+.refs li { padding-left: 4px; }
+.refs .used { font: 500 0.66rem var(--f-mono); color: var(--ink-3); margin-left: 6px; white-space: nowrap; }
+.refs a { color: var(--accent); }
+
+/* library */
+.lib { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 14px; align-items: start; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--rule); }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--ink-2); padding: 8px 10px; }
+.tabs button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--accent); }
+form { display: grid; gap: 10px; }
+.f2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px; }
+.fl { display: grid; gap: 4px; min-width: 0; }
+.fl > span { font-size: 0.76rem; color: var(--ink-2); }
+.coef { display: grid; grid-template-columns: 2.4em repeat(6, minmax(0, 1fr)); gap: 4px; align-items: center; font: 400 0.72rem var(--f-mono); color: var(--ink-3); }
+.coef input { width: 100%; }
+.formmsg { font-size: 0.8rem; min-height: 1.2em; }
+.formmsg.err { color: var(--s-a); }
+.formmsg.ok { color: var(--ok); }
+.contribs { display: grid; gap: 8px; }
+.ci { border: 1px solid var(--rule); border-radius: var(--r); padding: 10px 12px; display: grid; gap: 4px; background: var(--panel); }
+.ci .h { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
+.ci .h b { font-weight: 600; }
+.ci .meta { font-size: 0.76rem; color: var(--ink-3); }
+.ci .ref { font-size: 0.78rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.ci .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.empty { color: var(--ink-3); font-size: 0.85rem; border: 1px dashed var(--rule); border-radius: var(--r); padding: 14px; }
+footer { font-size: 0.76rem; color: var(--ink-3); border-top: 1px solid var(--rule); padding-top: 14px; }
+@media (max-width: 560px) { h1 { font-size: 1.5rem; } .wrap { padding-inline: 16px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+/*DIAGRAM_CSS*/
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="t">
+      <span class="eyebrow">Simulator of Train Response for Evaluating Aerosol Measurements · prototype</span>
+      <h1>STREAM</h1>
+      <p class="lede">Describe a sampling train, choose the physics, and see what each instrument would record. The same simulated data are then inverted twice, once with each set of assumptions you pick, so you can see what each assumption costs.</p>
+    </div>
+    <span class="pill warn" title="Model implementations have not yet been checked against experiments">Unvalidated prototype</span>
+  </header>
+
+<!--DIAGRAM_HTML-->
+  <section class="sec" aria-labelledby="h-setup">
+    <div class="sec-head">
+      <h2 id="h-setup">Setup values</h2>
+      <span class="eyebrow">aerosol → line → impactor → neutralizer → scanning DMA → CPC</span>
+    </div>
+    <p class="note" id="dg-note" hidden></p>
+    <div class="train" id="train">
+      <div class="stage">
+        <div class="name"><b>Aerosol</b><span>at the source</span></div>
+        <div class="modes">
+          <div class="row"><span></span><span class="hd">N cm⁻³</span><span class="hd">GMD nm</span><span class="hd">GSD</span></div>
+          <div class="row"><span class="eyebrow">1</span><input id="m1N" type="number" value="3000" step="100" min="0" aria-label="Mode 1 number concentration"><input id="m1G" type="number" value="40" step="1" min="3" aria-label="Mode 1 geometric mean diameter"><input id="m1S" type="number" value="1.6" step="0.05" min="1.05" aria-label="Mode 1 geometric standard deviation"></div>
+          <div class="row"><span class="eyebrow">2</span><input id="m2N" type="number" value="1500" step="100" min="0" aria-label="Mode 2 number concentration"><input id="m2G" type="number" value="150" step="5" min="3" aria-label="Mode 2 geometric mean diameter"><input id="m2S" type="number" value="1.5" step="0.05" min="1.05" aria-label="Mode 2 geometric standard deviation"></div>
+          <div class="row"><span class="eyebrow">3</span><input id="m3N" type="number" value="5" step="1" min="0" aria-label="Mode 3 number concentration"><input id="m3G" type="number" value="1500" step="50" min="3" aria-label="Mode 3 geometric mean diameter"><input id="m3S" type="number" value="1.8" step="0.05" min="1.05" aria-label="Mode 3 geometric standard deviation"></div>
+        </div>
+        <div class="fld"><label for="rho">Dry density <small>kg/m³</small></label><input id="rho" type="number" value="1600" step="100" min="100"></div>
+        <div class="fld"><label for="chi">Shape factor χ</label><input id="chi" type="number" value="1" step="0.05" min="1"></div>
+        <div class="fld"><label for="kappa">Hygroscopicity κ</label><input id="kappa" type="number" value="0.3" step="0.05" min="0"></div>
+        <div class="fld"><label for="rhsrc">RH at source <small>%</small></label><input id="rhsrc" type="number" value="30" step="5" min="0" max="98"></div>
+      </div>
+      <div class="stage">
+        <div class="name"><b>Sampling line</b><span>tube</span></div>
+        <div class="fld"><label for="lineL">Length <small>m</small></label><input id="lineL" type="number" value="2" step="0.25" min="0"></div>
+        <div class="fld"><label for="lineD">Inner diameter <small>mm</small></label><input id="lineD" type="number" value="4.6" step="0.1" min="1"></div>
+        <div class="fld"><label for="lineB">90° bends</label><input id="lineB" type="number" value="2" step="1" min="0"></div>
+        <div class="fld"><label for="dil">Dilution factor</label><input id="dil" type="number" value="1" step="1" min="1"></div>
+      </div>
+      <div class="stage">
+        <div class="name"><b>Impactor</b><span>inlet</span></div>
+        <div class="fld"><label for="impNz">Nozzle ⌀ <small>mm</small></label><input id="impNz" type="number" value="0.508" step="0.001" min="0.1"></div>
+        <div class="fld"><label for="impD">Rated d50 <small>nm, aero.</small></label><input id="impD" type="number" value="700" step="25" min="100"></div>
+        <p class="delta" id="impInfo"></p>
+        <div class="fld"><label for="impS">Steepness</label><input id="impS" type="number" value="8" step="1" min="2"></div>
+      </div>
+      <div class="stage" id="st-dryer">
+        <div class="name"><b>Dryer</b><span>diffusion</span></div>
+        <label class="chk"><input type="checkbox" id="dryOn"> Installed</label>
+        <div class="fld"><label for="dryRH">Outlet RH <small>%</small></label><input id="dryRH" type="number" value="15" step="5" min="0" max="98"></div>
+        <div class="fld"><label for="dryL">Length <small>m</small></label><input id="dryL" type="number" value="0.3" step="0.05" min="0"></div>
+        <div class="fld"><label for="dryD">Flow path ⌀ <small>mm</small></label><input id="dryD" type="number" value="10" step="1" min="1"></div>
+      </div>
+      <div class="stage">
+        <div class="name"><b>Neutralizer</b><span>bipolar</span></div>
+        <div class="fld"><label for="kmax">Charges tracked</label><input id="kmax" type="number" value="6" step="1" min="1" max="8"></div>
+        <div class="fld"><label for="temp">Temperature <small>°C</small></label><input id="temp" type="number" value="23" step="1"></div>
+      </div>
+      <div class="stage">
+        <div class="name"><b>DMA</b><span>long column</span></div>
+        <div class="fld"><label for="col">Column</label><select id="col"><option value="long">Long (r 9.37/19.61 mm, L 444 mm)</option><option value="nano">Nano (r 9.37/19.05 mm, L 50 mm)</option></select></div>
+        <div class="fld"><label for="leff">Loss length <small>m</small></label><input id="leff" type="number" value="13" step="0.5" min="0"></div>
+        <div class="fld"><label for="qsh">Sheath <small>L/min</small></label><input id="qsh" type="number" value="3" step="0.5" min="0.5"></div>
+        <div class="fld"><label for="qa">Aerosol <small>L/min</small></label><input id="qa" type="number" value="0.3" step="0.05" min="0.05"></div>
+        <div class="fld"><label for="V1">Voltage start <small>V</small></label><input id="V1" type="number" value="10" step="5" min="1"></div>
+        <div class="fld"><label for="V2">Voltage end <small>V</small></label><input id="V2" type="number" value="9500" step="250" min="100"></div>
+        <div class="fld"><label for="tscan">Up-scan time <small>s</small></label><input id="tscan" type="number" value="60" step="5" min="5"></div>
+        <div class="fld"><label for="tbin">Count bin <small>s</small></label><input id="tbin" type="number" value="0.5" step="0.1" min="0.1"></div>
+      </div>
+      <div class="stage">
+        <div class="name"><b>CPC</b><span>with plumbing</span></div>
+        <div class="fld"><label for="tpl">Plumbing delay <small>s</small></label><input id="tpl" type="number" value="1" step="0.1" min="0"></div>
+        <div class="fld"><label for="tau">Mixing time τ <small>s</small></label><input id="tau" type="number" value="0.6" step="0.1" min="0.05"></div>
+        <div class="fld"><label for="c50">d50 <small>nm</small></label><input id="c50" type="number" value="7" step="0.5" min="1.5"></div>
+        <div class="fld"><label for="c0">Cutoff d0 <small>nm</small></label><input id="c0" type="number" value="3" step="0.5" min="0"></div>
+      </div>
+      <div class="stage" id="st-aps">
+        <div class="name"><b>APS</b><span>aerodynamic</span></div>
+        <label class="chk"><input type="checkbox" id="apsOn"> Installed (shares the line)</label>
+        <div class="fld"><label for="apsQ">Sample flow <small>L/min</small></label><input id="apsQ" type="number" value="1" step="0.1" min="0.1"></div>
+        <div class="fld"><label for="apsT">Sample time <small>s</small></label><input id="apsT" type="number" value="20" step="5" min="1"></div>
+        <div class="fld"><label for="apsLo">Lower d50 <small>µm</small></label><input id="apsLo" type="number" value="0.6" step="0.05" min="0.3"></div>
+        <div class="fld"><label for="apsCut">Inlet cut <small>µm</small></label><input id="apsCut" type="number" value="15" step="1" min="2"></div>
+        <div class="fld"><label for="apsRes">Resolution σg</label><input id="apsRes" type="number" value="1.05" step="0.01" min="1.001"></div>
+      </div>
+    </div>
+    <div class="runbar">
+      <button class="primary" id="run" type="button">Run simulation</button>
+      <label class="chk"><input type="checkbox" id="noise" checked> Counting noise</label>
+      <label class="chk">Seed <input id="seed" type="number" value="1" step="1" min="1" style="width:56px"></label>
+      <span class="status" id="status">Loading…</span>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="h-res">
+    <div class="sec-head">
+      <h2 id="h-res">Results</h2>
+      <span class="eyebrow" id="info"></span>
+    </div>
+    <div class="results">
+      <div class="card">
+        <div><h3>Size distribution</h3><p class="delta">Input aerosol and the two inversions of the same simulated counts</p></div>
+        <div class="legend" id="lg1"></div>
+        <label class="chk"><input type="checkbox" id="logy"> Log scale (always on when an APS is in the setup)</label>
+        <div class="chart" id="c1"></div>
+      </div>
+      <div class="card">
+        <div><h3>Raw CPC counts during the scan</h3><p class="delta">Counts per bin; shaded part comes from multiply charged particles</p></div>
+        <div class="legend" id="lg2"></div>
+        <div class="chart" id="c2"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="tblwrap"><table id="summary"></table></div>
+      <p class="note">When an inversion uses the same models as the Truth column it recovers the input almost exactly, because the simulator generated the data. That shows what each assumption costs, not that the models are right. Whether they are right is what the validation experiments in the proposal will test.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="h-models">
+    <div class="sec-head">
+      <h2 id="h-models">Models</h2>
+      <span class="eyebrow">Truth generates the data · A and B invert it</span>
+    </div>
+    <div class="card">
+      <div class="tblwrap"><table class="ledger" id="ledger"></table></div>
+      <p class="delta">Highlighted cells differ from the Truth column. Contributed data and parameters from the library appear in these lists once added; unreviewed entries are marked.</p>
+    </div>
+    <div class="card">
+      <h3>References for this selection</h3>
+      <ol class="refs" id="refs"></ol>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="h-lib">
+    <div class="sec-head">
+      <h2 id="h-lib">Community library</h2>
+      <span class="pill" id="libstate">Connecting…</span>
+    </div>
+    <p class="lede">Add instrument performance data and published model parameters as they appear. Measured curves and charging coefficients become selectable models right away, marked unreviewed until an editor checks them. Model proposals that need new code go to a queue for implementation.</p>
+    <div class="lib">
+      <div class="card">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected="true" data-tab="data">Upload performance data</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="charging">Charging parameters</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="proposal">Propose a model</button>
+        </div>
+        <form id="f-data" data-kind="data">
+          <div class="f2">
+            <label class="fl"><span>What was measured</span>
+              <select id="fd-comp" class="wide">
+                <option value="cpc_eff">CPC counting efficiency vs. diameter</option>
+                <option value="impactor">Impactor or inlet penetration vs. diameter</option>
+                <option value="line_diff">Sampling line penetration vs. diameter</option>
+              </select></label>
+            <label class="fl"><span>Name shown in model lists</span><input type="text" id="fd-name" placeholder="e.g. CPC 3756, NaCl, 1.5 L/min" required></label>
+          </div>
+          <div class="f2">
+            <label class="fl"><span>Instrument make and model</span><input type="text" id="fd-inst"></label>
+            <label class="fl"><span>Test aerosol and conditions</span><input type="text" id="fd-cond" placeholder="e.g. Ag, 22 °C, 1 atm"></label>
+          </div>
+          <div class="f2">
+            <label class="fl"><span>Reference</span><input type="text" id="fd-ref" placeholder="Authors (year) Journal vol:pages"></label>
+            <label class="fl"><span>DOI or URL</span><input type="text" id="fd-doi"></label>
+          </div>
+          <label class="fl"><span>Data: two columns, diameter in nm and value (0–1 or %). Paste, or choose a CSV file.</span>
+            <textarea id="fd-csv" placeholder="diameter_nm, efficiency&#10;3, 0.02&#10;5, 0.21&#10;7, 0.50&#10;10, 0.81&#10;20, 0.98&#10;50, 1.00"></textarea></label>
+          <input type="file" id="fd-file" accept=".csv,.txt,text/csv,text/plain" aria-label="Choose a CSV file">
+          <div class="runbar"><button class="primary" type="submit">Add to library</button><span class="formmsg" id="fd-msg"></span></div>
+        </form>
+        <form id="f-charging" data-kind="charging" hidden>
+          <p class="delta">Coefficients a₀…a₅ for the Wiedensohler (1988) form, log₁₀ f = Σ aᵢ (log₁₀ Dp/nm)ⁱ, for positively charged particles. Charges of three or more use Gunn's formula.</p>
+          <div class="f2">
+            <label class="fl"><span>Name shown in model lists</span><input type="text" id="fc-name" placeholder="e.g. Soft X-ray neutralizer, N₂" required></label>
+            <label class="fl"><span>Neutralizer and carrier gas</span><input type="text" id="fc-cond"></label>
+          </div>
+          <div class="f2">
+            <label class="fl"><span>Reference</span><input type="text" id="fc-ref"></label>
+            <label class="fl"><span>DOI or URL</span><input type="text" id="fc-doi"></label>
+          </div>
+          <div class="coef" id="fc-k1"><span>+1</span></div>
+          <div class="coef" id="fc-k2"><span>+2</span></div>
+          <div class="runbar"><button type="button" class="small" id="fc-fill">Fill with Wiedensohler (1988)</button></div>
+          <div class="runbar"><button class="primary" type="submit">Add to library</button><span class="formmsg" id="fc-msg"></span></div>
+        </form>
+        <form id="f-proposal" data-kind="proposal" hidden>
+          <div class="f2">
+            <label class="fl"><span>Component</span>
+              <select id="fp-comp" class="wide"></select></label>
+            <label class="fl"><span>Model name</span><input type="text" id="fp-name" required></label>
+          </div>
+          <label class="fl"><span>What it changes and when it matters</span><textarea id="fp-desc"></textarea></label>
+          <div class="f2">
+            <label class="fl"><span>Reference</span><input type="text" id="fp-ref"></label>
+            <label class="fl"><span>DOI or URL</span><input type="text" id="fp-doi"></label>
+          </div>
+          <div class="runbar"><button class="primary" type="submit">Submit proposal</button><span class="formmsg" id="fp-msg"></span></div>
+        </form>
+      </div>
+      <div class="card">
+        <div class="sec-head"><h3>Contributions</h3><span class="eyebrow" id="ccount"></span></div>
+        <div class="contribs" id="contribs"><div class="empty">Contributions appear here. Use the form to add the first measured curve or parameter set.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Prototype physics engine runs in your browser. Built-in models are implementations of the cited papers and have not yet been reviewed against experiments. Clarkson University · Center for Air and Aquatic Engineering and Science.</footer>
+</div>
+
+<script type="text/plain" id="engine-src">/*ENGINE*/</script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+
+  // ------------------------------------------------------------ references
+  const REFS = {
+    kw1975: { t: "Knutson, E. O., & Whitby, K. T. (1975). Aerosol classification by electric mobility: apparatus, theory, and applications. J. Aerosol Sci., 6, 443–451." },
+    stolz1988: { t: "Stolzenburg, M. R. (1988). An ultrafine aerosol size distribution measuring system. Ph.D. thesis, University of Minnesota." },
+    sm2008: { t: "Stolzenburg, M. R., & McMurry, P. H. (2008). Equations governing single and tandem DMA configurations and a new lognormal approximation to the transfer function. Aerosol Sci. Technol., 42, 421–432." },
+    w1988: { t: "Wiedensohler, A. (1988). An approximation of the bipolar charge distribution for particles in the submicron size range. J. Aerosol Sci., 19, 387–389." },
+    gunn1956: { t: "Gunn, R., & Woessner, R. H. (1956). Measurements of the systematic electrification of aerosols. J. Colloid Sci., 11, 254–259." },
+    kim2005: { t: "Kim, J. H., Mulholland, G. W., Kukuck, S. R., & Pui, D. Y. H. (2005). Slip correction measurements of certified PSL nanoparticles using a nanometer differential mobility analyzer (nano-DMA) for Knudsen number from 0.5 to 83. J. Res. NIST, 110, 31–54." },
+    davies1945: { t: "Davies, C. N. (1945). Definitive equations for the fluid resistance of spheres. Proc. Phys. Soc., 57, 259–270." },
+    gk1949: { t: "Gormley, P. G., & Kennedy, M. (1949). Diffusion from a stream flowing through a cylindrical tube. Proc. R. Irish Acad., 52A, 163–169." },
+    thomas1958: { t: "Thomas, J. W. (1958). Gravity settling of particles in a horizontal tube. J. Air Pollut. Control Assoc., 8, 32–34." },
+    crane1977: { t: "Crane, R. I., & Evans, R. L. (1977). Inertial deposition of particles in a bent pipe. J. Aerosol Sci., 8, 161–170." },
+    pui1987: { t: "Pui, D. Y. H., Romay-Novas, F., & Liu, B. Y. H. (1987). Experimental study of particle deposition in bends of circular cross section. Aerosol Sci. Technol., 7, 301–315." },
+    rp1986: { t: "Reineking, A., & Porstendörfer, J. (1986). Measurements of particle loss functions in a differential mobility analyzer (TSI, Model 3071) for different flow rates. Aerosol Sci. Technol., 5, 483–486." },
+    wf1990: { t: "Wang, S. C., & Flagan, R. C. (1990). Scanning electrical mobility spectrometer. Aerosol Sci. Technol., 13, 230–240." },
+    dd2008: { t: "Dubey, P., & Dhaniyala, S. (2008). Analysis of scanning DMA transfer functions. Aerosol Sci. Technol., 42, 544–555.", doi: "10.1080/02786820802220258" },
+    dd2011: { t: "Dubey, P., & Dhaniyala, S. (2011). A new approach to calculate diffusional transfer functions of scanning DMAs. Aerosol Sci. Technol., 45, 1031–1040.", doi: "10.1080/02786826.2011.579644" },
+    hd2013: { t: "He, M., & Dhaniyala, S. (2013). A multiple charging correction algorithm for scanning electrical mobility spectrometer data. J. Aerosol Sci., 61, 13–26.", doi: "10.1016/j.jaerosci.2013.03.007" },
+    cfs2002: { t: "Collins, D. R., Flagan, R. C., & Seinfeld, J. H. (2002). Improved inversion of scanning DMA data. Aerosol Sci. Technol., 36, 1–9.", doi: "10.1080/027868202753339032" },
+    mai2018: { t: "Mai, H., Kong, W., Seinfeld, J. H., & Flagan, R. C. (2018). Scanning DMA data analysis II. Integrated DMA-CPC instrument response and data inversion. Aerosol Sci. Technol., 52, 1400–1414.", doi: "10.1080/02786826.2018.1528006" },
+    mw1976: { t: "Marple, V. A., & Willeke, K. (1976). Impactor design. Atmos. Environ., 10, 891–896." },
+    pk2007: { t: "Petters, M. D., & Kreidenweis, S. M. (2007). A single parameter representation of hygroscopic growth and cloud condensation nucleus activity. Atmos. Chem. Phys., 7, 1961–1971." },
+    decarlo2004: { t: "DeCarlo, P. F., Slowik, J. G., Worsnop, D. R., Davidovits, P., & Jimenez, J. L. (2004). Particle morphology and density characterization by combined mobility and aerodynamic diameter measurements. Part 1: Theory. Aerosol Sci. Technol., 38, 1185–1205." },
+    wj1987: { t: "Wang, H.-C., & John, W. (1987). Particle density correction for the aerodynamic particle sizer. Aerosol Sci. Technol., 6, 191–198." },
+    pl2003: { t: "Peters, T. M., & Leith, D. (2003). Concentration measurement and counting efficiency of the aerodynamic particle sizer 3321. J. Aerosol Sci., 34, 627–634." },
+    mertes1995: { t: "Mertes, S., Schröder, F., & Wiedensohler, A. (1995). The particle detection efficiency curve of the TSI-3010 CPC as a function of the temperature difference between saturator and condenser. Aerosol Sci. Technol., 23, 257–261." },
+  };
+
+  // ------------------------------------------------------------ model ledger
+  const COMPONENTS = [
+    { key: "growth", label: "Water uptake", sub: "humidity and dryers", opts: [
+      ["kappa", "κ-Köhler growth, Petters & Kreidenweis (2007)", ["pk2007"]], ["none", "Ignored (sizes taken as dry)", []] ] },
+    { key: "shape", label: "Particle shape", sub: "mobility and aerodynamic size", opts: [
+      ["chi", "Dynamic shape factor χ applied", ["decarlo2004"]], ["sphere", "Spheres (χ = 1)", []] ] },
+    { key: "slip", label: "Slip correction", sub: "particle drag", opts: [
+      ["kim2005", "Kim et al. (2005)", ["kim2005"]], ["davies1945", "Davies (1945)", ["davies1945"]] ] },
+    { key: "line_diff", label: "Sampling line: diffusion", sub: "tube loss", custom: "line_diff", opts: [
+      ["gk1949", "Gormley & Kennedy (1949)", ["gk1949"]], ["none", "Ignored", []] ] },
+    { key: "line_settle", label: "Sampling line: settling", sub: "horizontal tube", opts: [
+      ["thomas", "Thomas (1958)", ["thomas1958"]], ["none", "Ignored", []] ] },
+    { key: "line_bend", label: "Sampling line: bends", sub: "inertial loss", opts: [
+      ["pui1987", "Pui et al. (1987), laminar", ["pui1987"]], ["crane1977", "Crane & Evans (1977)", ["crane1977"]], ["none", "Ignored", []] ] },
+    { key: "impactor", label: "Inlet impactor", sub: "large-particle cut", custom: "impactor", opts: [
+      ["stk50", "From nozzle and flow, Stk50 = 0.24, aerodynamic", ["mw1976"]], ["logistic", "Rated d50, applied to aerodynamic size", []],
+      ["geometric", "Rated d50, applied to particle size (density ignored)", []], ["none", "Ignored", []] ] },
+    { key: "charging", label: "Charge distribution", sub: "neutralizer", custom: "charging", opts: [
+      ["w88", "Wiedensohler (1988), Gunn for ≥3", ["w1988", "gunn1956"]], ["gunn1956", "Gunn formula for all charges", ["gunn1956"]] ] },
+    { key: "charges", label: "Multiple charging", sub: "charges per particle", opts: [
+      ["multiple", "All tracked charges", ["hd2013"]], ["single", "Singly charged only", []] ] },
+    { key: "dma_tf", label: "DMA transfer function", sub: "classification", opts: [
+      ["stolzenburg1988", "Diffusing, Stolzenburg (1988)", ["stolz1988", "sm2008"]], ["triangle", "Triangular, Knutson & Whitby (1975)", ["kw1975"]] ] },
+    { key: "dma_loss", label: "DMA diffusion losses", sub: "inside the column", opts: [
+      ["gk_leff", "Effective length, 13 m", ["gk1949", "rp1986"]], ["none", "Ignored", []] ] },
+    { key: "scanning", label: "Scanning-mode classification", sub: "voltage ramp", opts: [
+      ["residence", "Residence-time-averaged voltage", ["wf1990", "dd2008"]], ["steady", "Steady state at each instant", ["wf1990"]],
+      ["planned:dd", "Full scanning TF, Dubey & Dhaniyala (2008, 2011): planned", ["dd2008", "dd2011"], true] ] },
+    { key: "cpc_eff", label: "CPC counting efficiency", sub: "low-size cutoff", custom: "cpc_eff", opts: [
+      ["exp_d50", "Exponential curve (d50, d0)", ["mertes1995"]], ["none", "Ignored (100%)", []] ] },
+    { key: "cpc_response", label: "CPC time response", sub: "plumbing and mixing", opts: [
+      ["mixing", "Plug delay + first-order mixing", ["cfs2002"]], ["fixed_delay", "Single fixed delay", []],
+      ["planned:mai", "Integrated DMA–CPC response, Mai et al. (2018): planned", ["mai2018"], true] ] },
+    { key: "aps_conv", label: "APS size conversion", sub: "aerodynamic → particle size", opts: [
+      ["stokes", "Density and shape corrected, Stokes regime", ["decarlo2004"]], ["none", "Aerodynamic size reported as is", []],
+      ["planned:wj", "Non-Stokes correction, Wang & John (1987): planned", ["wj1987"], true] ] },
+    { key: "aps_eff", label: "APS counting efficiency", sub: "detection and inlet", opts: [
+      ["curve", "Lower detection and inlet cut curves", ["pl2003"]], ["none", "Ignored (100%)", []] ] },
+  ];
+  const CURRENT = { slip: "kim2005", line_diff: "gk1949", line_settle: "thomas", line_bend: "pui1987", impactor: "stk50",
+    charging: "w88", charges: "multiple", dma_tf: "stolzenburg1988", dma_loss: "gk_leff", scanning: "residence",
+    cpc_eff: "exp_d50", cpc_response: "mixing", growth: "kappa", aps_conv: "stokes", aps_eff: "curve", shape: "chi" };
+  const LEGACY = { slip: "davies1945", line_diff: "none", line_settle: "none", line_bend: "none", impactor: "none",
+    charging: "w88", charges: "single", dma_tf: "triangle", dma_loss: "none", scanning: "steady",
+    cpc_eff: "none", cpc_response: "fixed_delay", growth: "none", aps_conv: "none", aps_eff: "none", shape: "sphere" };
+  const COLS = [
+    { id: "truth", label: "Truth", sub: "generates the data", color: "var(--s-truth)" },
+    { id: "A", label: "Inversion A", sub: "dashed line", color: "var(--s-a)" },
+    { id: "B", label: "Inversion B", sub: "solid line", color: "var(--s-b)" },
+  ];
+  const state = { cfg: { truth: { ...CURRENT }, A: { ...LEGACY }, B: { ...CURRENT } }, contribs: [], reviews: {}, me: null, canReview: false, profiles: {}, diagram: null };
+
+  const userOpts = (comp) => state.contribs
+    .filter((c) => (c.kind === "data" && c.component === comp) || (c.kind === "charging" && comp === "charging"))
+    .map((c) => ["user:" + c.id, (c.name || "Untitled") + (state.reviews[c.id] ? "" : " · unreviewed"), []]);
+
+  function renderLedger() {
+    const t = $("ledger");
+    const head = `<thead><tr><th>Component</th>${COLS.map((c) => `<th><span class="sw2" style="background:${c.color}"></span>${c.label}<div class="delta" style="text-transform:none;letter-spacing:0;font-family:var(--f-body)">${c.sub}</div><div class="presets"><button type="button" class="small" data-preset="legacy" data-col="${c.id}">Legacy</button><button type="button" class="small" data-preset="current" data-col="${c.id}">Current</button></div></th>`).join("")}</tr></thead>`;
+    const rows = COMPONENTS.map((comp) => {
+      const opts = comp.opts.concat(comp.custom ? userOpts(comp.custom) : []);
+      return `<tr><td class="comp"><b>${comp.label}</b><span>${comp.sub}</span></td>${COLS.map((c) => {
+        const v = state.cfg[c.id][comp.key];
+        const differs = c.id !== "truth" && v !== state.cfg.truth[comp.key];
+        return `<td class="${differs ? "diff" : ""}"><select id="sel-${c.id}-${comp.key}" data-col="${c.id}" data-key="${comp.key}" aria-label="${c.label}: ${comp.label}">${opts.map(([id, lab, , dis]) => `<option value="${id}" ${id === v ? "selected" : ""} ${dis ? "disabled" : ""}>${esc(lab)}</option>`).join("")}</select></td>`;
+      }).join("")}</tr>`;
+    }).join("");
+    t.innerHTML = head + "<tbody>" + rows + "</tbody>";
+    renderRefs();
+  }
+  function renderRefs() {
+    const used = new Map();
+    COLS.forEach((c) => COMPONENTS.forEach((comp) => {
+      const v = state.cfg[c.id][comp.key];
+      const o = comp.opts.find((x) => x[0] === v);
+      let keys = o ? o[2] : [];
+      if (!o && v.startsWith("user:")) keys = [v];
+      keys.forEach((k) => { if (!used.has(k)) used.set(k, new Set()); used.get(k).add(c.label); });
+    }));
+    const items = [...used.entries()].map(([k, cols]) => {
+      let text, doi;
+      if (k.startsWith("user:")) {
+        const c = state.contribs.find((x) => "user:" + x.id === k);
+        if (!c) return "";
+        text = `${c.name}${c.reference ? ". " + c.reference : ""} (community contribution${state.reviews[c.id] ? ", reviewed" : ", unreviewed"})`;
+        doi = c.doi;
+      } else { text = REFS[k].t; doi = REFS[k].doi; }
+      return `<li>${esc(text)}${doi ? ` <a href="${linkFor(doi)}" target="_blank" rel="noopener">${esc(doi)}</a>` : ""}<span class="used">${[...cols].join(" · ")}</span></li>`;
+    }).join("");
+    $("refs").innerHTML = items || "<li>No published models selected.</li>";
+  }
+  const linkFor = (doi) => /^https?:\/\//.test(doi) ? doi : "https://doi.org/" + doi.replace(/^doi:\s*/i, "");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+
+  $("ledger").addEventListener("change", (e) => {
+    const s = e.target.closest("select"); if (!s) return;
+    state.cfg[s.dataset.col][s.dataset.key] = s.value; renderLedger(); schedule();
+  });
+  $("ledger").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-preset]"); if (!b) return;
+    state.cfg[b.dataset.col] = { ...(b.dataset.preset === "legacy" ? LEGACY : CURRENT) };
+    renderLedger(); schedule();
+  });
+
+  // ------------------------------------------------------------ worker
+  const engineSrc = $("engine-src").textContent;
+  const workerSrc = engineSrc + "\nself.onmessage = function (e) { try { self.postMessage({ ok: true, id: e.data.id, r: self.STREAM.run(e.data.job) }); } catch (err) { self.postMessage({ ok: false, id: e.data.id, error: String(err && err.message || err) }); } };";
+  let worker = null, jobId = 0, latest = 0;
+  try { worker = new Worker(URL.createObjectURL(new Blob([workerSrc], { type: "text/javascript" }))); } catch (e) { worker = null; }
+  let inline = null;
+  function runInline(job) { if (!inline) { const f = new Function("self", engineSrc + "\nreturn self.STREAM;"); inline = f({}); } return inline.run(job); }
+
+  const num = (id) => parseFloat($(id).value);
+  function readJob() {
+    const p = {
+      T: num("temp") + 273.15, rho: num("rho"),
+      line_L: num("lineL"), line_Dt: num("lineD") * 1e-3, line_bends: Math.round(num("lineB")),
+      impactor_d50: num("impD") * 1e-9, impactor_slope: num("impS"), impactor_W: num("impNz") * 1e-3,
+      qa: num("qa") / 60000, qsh: num("qsh") / 60000, V1: num("V1"), V2: num("V2"),
+      t_scan: num("tscan"), t_bin: num("tbin"), t_plumb: num("tpl"), cpc_tau: num("tau"),
+      cpc_d50: num("c50") * 1e-9, cpc_d0: Math.min(num("c0"), num("c50") - 0.5) * 1e-9,
+      max_charge: Math.max(1, Math.min(8, Math.round(num("kmax")))),
+      dma_Leff: num("leff"),
+      r1: 9.37e-3, r2: $("col").value === "nano" ? 19.05e-3 : 19.61e-3, L: $("col").value === "nano" ? 0.04987 : 0.44369,
+      kappa: Math.max(0, num("kappa")), chi: Math.max(1, num("chi")), rh_src: Math.min(Math.max(num("rhsrc"), 0), 98) / 100,
+      dil: Math.max(1, num("dil") || 1),
+    };
+    const bad = Object.entries(p).find(([, v]) => !isFinite(v));
+    if (bad) throw new Error("Check the setup values: one field is empty or not a number.");
+    if (p.V2 <= p.V1) throw new Error("Voltage end must be higher than voltage start.");
+    if (p.qa >= p.qsh) throw new Error("Aerosol flow must be lower than sheath flow.");
+    const modes = [1, 2, 3].map((k) => [num(`m${k}N`), num(`m${k}G`) * 1e-9, num(`m${k}S`)]).filter((m) => m[0] > 0 && m[2] > 1);
+    const apsOn = $("apsOn").checked, dryOn = $("dryOn").checked;
+    const apsBase = apsOn ? { Q: num("apsQ") / 60000, t: num("apsT"), d50lo: num("apsLo") * 1e-6, cut: num("apsCut") * 1e-6, res: num("apsRes") } : null;
+    if (apsBase && Object.values(apsBase).some((v) => !isFinite(v) || v <= 0)) throw new Error("Check the APS values: one field is empty or not positive.");
+    const rhOut = Math.min(Math.max(num("dryRH"), 0), 98) / 100;
+    let aps = null;
+    if (state.diagram) {
+      const D = state.diagram;
+      p.segments = D.smps.segments; p.rh_inst = D.smps.rh == null ? p.rh_src : D.smps.rh; p.dil = D.smps.dil;
+      if (D.smps.impactorQ) p.impactor_Q = D.smps.impactorQ;
+      if (apsBase && D.aps) aps = Object.assign({}, apsBase, { segments: D.aps.segments, rh: D.aps.rh == null ? p.rh_src : D.aps.rh, dil: D.aps.dil });
+    } else {
+      const shared = p.qa + (apsBase ? apsBase.Q : 0);
+      const segs = [{ L: p.line_L, D: p.line_Dt, Q: shared, bends: p.line_bends, rh: p.rh_src }];
+      if (dryOn) segs.push({ L: num("dryL"), D: num("dryD") * 1e-3, Q: shared, bends: 0, rh: rhOut });
+      p.segments = segs; p.rh_inst = dryOn ? rhOut : p.rh_src;
+      if (apsBase) aps = Object.assign({}, apsBase, { segments: segs, rh: p.rh_inst, dil: p.dil });
+    }
+    const custom = {};
+    ["truth", "A", "B"].forEach((c) => Object.values(state.cfg[c]).forEach((v) => {
+      if (typeof v === "string" && v.startsWith("user:")) {
+        const k = state.contribs.find((x) => "user:" + x.id === v);
+        if (k) custom[v] = k.kind === "charging" ? { k1: k.k1, k2: k.k2 } : { x: k.x, y: k.y };
+      }
+    }));
+    return { params: p, modes, aps, truth: state.cfg.truth, cfgA: state.cfg.A, cfgB: state.cfg.B, custom, noise: $("noise").checked, seed: Math.round(num("seed")) || 1 };
+  }
+
+  let timer = null, lastRun = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(go, 350); }
+  function go() {
+    let job;
+    try { job = readJob(); } catch (err) { $("status").textContent = err.message; return; }
+    const id = ++jobId; latest = id;
+    $("status").textContent = "Simulating…"; $("run").disabled = true;
+    const t0 = performance.now();
+    const done = (r) => { if (id !== latest) return; $("run").disabled = false; $("status").textContent = `Done in ${Math.round(performance.now() - t0)} ms`; lastRun = { r, job }; render(r, job); onRun.forEach((f) => { try { f(); } catch (e) { /* probe refresh is optional */ } }); };
+    const fail = (msg) => { if (id !== latest) return; $("run").disabled = false; $("status").textContent = "Simulation failed: " + msg; };
+    if (worker) {
+      worker.onmessage = (e) => { if (e.data.id !== latest) return; e.data.ok ? done(e.data.r) : fail(e.data.error); };
+      worker.onerror = () => { worker = null; try { done(runInline(job)); } catch (err) { fail(err.message); } };
+      worker.postMessage({ id, job });
+    } else {
+      setTimeout(() => { try { done(runInline(job)); } catch (err) { fail(err.message); } }, 20);
+    }
+  }
+  $("run").addEventListener("click", go);
+  const DIAGRAM_FIELDS = new Set(["lineL", "lineD", "lineB", "dil", "dryOn", "dryRH", "dryL", "dryD", "apsOn", "rhsrc"]);
+  function dropDiagram(e) {
+    if (state.diagram && e && e.target && DIAGRAM_FIELDS.has(e.target.id)) { state.diagram = null; showDiagramNote(); }
+  }
+  function showDiagramNote() {
+    const n = $("dg-note");
+    if (!state.diagram) { n.hidden = true; return; }
+    const D = state.diagram;
+    n.hidden = false;
+    n.textContent = `Tubing, dryers and dilution come from the diagram: ${D.smps.segments.length} tube segment${D.smps.segments.length === 1 ? "" : "s"} to the DMA${D.aps ? ` and ${D.aps.segments.length} to the APS` : ""}. The sampling-line fields show an equivalent single tube. Editing them switches back to the fields.`;
+  }
+  $("train").addEventListener("input", dropDiagram);
+  $("train").addEventListener("change", dropDiagram);
+  $("train").addEventListener("input", schedule);
+  $("train").addEventListener("change", schedule);
+  $("noise").addEventListener("change", schedule);
+  $("logy").addEventListener("change", () => { if (lastRun) render(lastRun.r, lastRun.job); });
+  $("seed").addEventListener("input", schedule);
+
+  // ------------------------------------------------------------ charts
+  const LN10 = Math.LN10;
+  function interpLog(xs, ys, x) {
+    if (x <= xs[0] || x >= xs[xs.length - 1]) return 0;
+    let i = 0; while (i < xs.length - 2 && x > xs[i + 1]) i++;
+    const f = (Math.log(x) - Math.log(xs[i])) / (Math.log(xs[i + 1]) - Math.log(xs[i]));
+    return ys[i] + f * (ys[i + 1] - ys[i]);
+  }
+  function niceTicks(lo, hi, n) {
+    const span = hi - lo, step0 = Math.pow(10, Math.floor(Math.log10(span / n))), err = span / n / step0;
+    const step = step0 * (err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1);
+    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10)); return out;
+  }
+  const fmt = (v) => v >= 10000 ? (v / 1000).toFixed(0) + "k" : v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, "") + "k" : v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v.toFixed(2);
+
+  function drawChart(host, spec) {
+    const W = 560, H = 300, m = { l: 46, r: 12, t: 10, b: 36 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const [x0, x1] = spec.x.domain, [y0, y1] = spec.y.domain;
+    const sx = spec.x.log ? (v) => m.l + (Math.log10(v) - Math.log10(x0)) / (Math.log10(x1) - Math.log10(x0)) * pw : (v) => m.l + (v - x0) / (x1 - x0) * pw;
+    const sy = spec.y.log ? (v) => m.t + ph - (Math.log10(Math.max(v, y0)) - Math.log10(y0)) / (Math.log10(y1) - Math.log10(y0)) * ph : (v) => m.t + ph - (v - y0) / (y1 - y0) * ph;
+    let g = "";
+    spec.y.ticks.forEach((v) => { g += `<line class="grid" x1="${m.l}" x2="${m.l + pw}" y1="${sy(v)}" y2="${sy(v)}"/><text x="${m.l - 6}" y="${sy(v) + 3.5}" text-anchor="end">${fmt(v)}</text>`; });
+    spec.x.ticks.forEach((v) => { g += `<line class="grid" x1="${sx(v)}" x2="${sx(v)}" y1="${m.t}" y2="${m.t + ph}"/><text x="${sx(v)}" y="${m.t + ph + 15}" text-anchor="middle">${fmt(v)}</text>`; });
+    g += `<line class="axis" x1="${m.l}" x2="${m.l + pw}" y1="${m.t + ph}" y2="${m.t + ph}"/>`;
+    g += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle">${spec.x.title}</text>`;
+    g += `<text transform="translate(11 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">${spec.y.title}</text>`;
+    (spec.bands || []).forEach((b) => { g += `<rect x="${sx(b[0])}" y="${m.t}" width="${Math.max(0, sx(b[1]) - sx(b[0]))}" height="${ph}" fill="var(--rule-2)" opacity="0.7"/>`; });
+    const clipY = (v) => Math.min(Math.max(v, y0), y1);
+    spec.series.forEach((s) => {
+      const pts = s.x.map((xv, i) => [xv, s.y[i]]).filter(([xv]) => xv >= x0 && xv <= x1);
+      if (!pts.length) return;
+      const path = pts.map(([xv, yv], i) => `${i ? "L" : "M"}${sx(xv).toFixed(1)},${sy(clipY(yv)).toFixed(1)}`).join("");
+      if (s.area) g += `<path d="${path}L${sx(pts[pts.length - 1][0]).toFixed(1)},${sy(y0)}L${sx(pts[0][0]).toFixed(1)},${sy(y0)}Z" fill="${s.color}" opacity="${s.areaOpacity || 0.12}"/>`;
+      if (!s.noLine) g += `<path d="${path}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? 'stroke-dasharray="6 4"' : ""} stroke-linejoin="round" stroke-linecap="round"/>`;
+      if (s.markers) pts.forEach(([xv, yv]) => { if (yv >= y0) g += `<circle cx="${sx(xv).toFixed(1)}" cy="${sy(clipY(yv)).toFixed(1)}" r="3.6" fill="${s.color}" stroke="var(--panel)" stroke-width="1.5"/>`; });
+    });
+    g += `<line id="${host.id}-x" x1="0" x2="0" y1="${m.t}" y2="${m.t + ph}" stroke="var(--ink-3)" stroke-width="1" opacity="0"/>`;
+    host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(spec.label)}">${g}<rect x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent" class="hit"/></svg><div class="tip" hidden></div>`;
+    const svg = host.querySelector("svg"), tip = host.querySelector(".tip"), cross = svg.querySelector(`#${host.id}-x`);
+    const invx = (px) => spec.x.log ? Math.pow(10, Math.log10(x0) + (px - m.l) / pw * (Math.log10(x1) - Math.log10(x0))) : x0 + (px - m.l) / pw * (x1 - x0);
+    const move = (ev) => {
+      const r = svg.getBoundingClientRect(); const px = (ev.clientX - r.left) / r.width * W;
+      if (px < m.l || px > m.l + pw) { leave(); return; }
+      const xv = invx(px);
+      cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("opacity", "0.6");
+      tip.innerHTML = `<b>${spec.x.fmt(xv)}</b><br>` + spec.series.filter((s) => s.tip !== false).map((s) => `<span class="sw" style="background:${s.color}"></span>${s.name}: ${spec.y.fmtv(s.at ? s.at(xv) : 0)}`).join("<br>");
+      tip.hidden = false;
+      const hr = host.getBoundingClientRect(); let left = ev.clientX - hr.left + 12;
+      if (left + tip.offsetWidth > hr.width) left = ev.clientX - hr.left - tip.offsetWidth - 12;
+      tip.style.left = Math.max(0, left) + "px"; tip.style.top = Math.max(0, ev.clientY - hr.top - tip.offsetHeight - 8) + "px";
+    };
+    const leave = () => { tip.hidden = true; cross.setAttribute("opacity", "0"); };
+    svg.addEventListener("pointermove", move); svg.addEventListener("pointerleave", leave);
+  }
+
+  function legend(el, items) {
+    el.innerHTML = items.map((i) => `<span><i class="${i.cls || ""}" style="${i.cls === "fill" ? "background:" : "border-color:"}${i.color}"></i>${i.name}</span>`).join("");
+  }
+
+  function render(r, job) {
+    const dnm = r.d.map((v) => v * 1e9);
+    const truthLog = r.nTrue.map((v) => v * LN10);
+    const A = { x: r.invA.dj.map((v) => v * 1e9), y: r.invA.x.map((v) => v * LN10) };
+    const B = { x: r.invB.dj.map((v) => v * 1e9), y: r.invB.x.map((v) => v * LN10) };
+    const aps = r.aps ? { A: { x: r.aps.A.d.map((v) => v * 1e9), y: r.aps.A.y.map((v) => v * LN10) }, B: { x: r.aps.B.d.map((v) => v * 1e9), y: r.aps.B.y.map((v) => v * LN10) } } : null;
+    const [lo, hi] = r.info.dRange.map((v) => v * 1e9);
+    const xmax = aps ? 20000 : 2000;
+    const logy = !!aps || $("logy").checked;
+    const ymax = Math.max(...truthLog, ...A.y, ...B.y, ...(aps ? aps.A.y.concat(aps.B.y) : [])) * (logy ? 2 : 1.08) || 1;
+    const ymin = logy ? Math.max(ymax / 1e6, 1e-3) : 0;
+    const rhInst = job.params.rh_inst != null ? job.params.rh_inst : job.params.rh_src;
+    $("impInfo").textContent = r.info.impCut ? `Truth cut: ${Math.round(r.info.impCut * 1e9)} nm aerodynamic = ${Math.round(r.info.impCutGeo * 1e9)} nm dry particle size at this density, shape and RH.` : "No impactor in the Truth model.";
+    $("info").textContent = `sizes ${lo.toFixed(1)}–${hi.toFixed(0)} nm · residence ${r.info.tres.toFixed(1)} s · RH at instrument ${Math.round(rhInst * 100)}%, growth ×${r.info.gfInst.toFixed(2)} at 100 nm`;
+    const lg = [{ name: "Input aerosol, dry (truth)", color: "var(--s-truth)" }, { name: "SMPS, inversion A", color: "var(--s-a)", cls: "dash" }, { name: "SMPS, inversion B", color: "var(--s-b)" }];
+    if (aps) lg.push({ name: "APS, A (dots)", color: "var(--s-a)", cls: "dash" }, { name: "APS, B (dots)", color: "var(--s-b)" });
+    legend($("lg1"), lg);
+    const decades = []; if (logy) for (let e = Math.ceil(Math.log10(ymin)); e <= Math.floor(Math.log10(ymax)); e++) decades.push(Math.pow(10, e));
+    const series = [
+      { name: "Truth", x: dnm, y: truthLog, color: "var(--s-truth)", area: true, width: 1.5, at: (v) => interpLog(dnm, truthLog, v) },
+      { name: "SMPS A", x: A.x, y: A.y, color: "var(--s-a)", dash: true, at: (v) => interpLog(A.x, A.y, v) },
+      { name: "SMPS B", x: B.x, y: B.y, color: "var(--s-b)", at: (v) => interpLog(B.x, B.y, v) },
+    ];
+    if (aps) series.push(
+      { name: "APS A", x: aps.A.x, y: aps.A.y, color: "var(--s-a)", dash: true, width: 1.25, markers: true, at: (v) => interpLog(aps.A.x, aps.A.y, v) },
+      { name: "APS B", x: aps.B.x, y: aps.B.y, color: "var(--s-b)", width: 1.25, markers: true, at: (v) => interpLog(aps.B.x, aps.B.y, v) });
+    drawChart($("c1"), {
+      label: "Size distribution: truth and inversions",
+      x: { domain: [3, xmax], log: true, ticks: aps ? [3, 10, 100, 1000, 10000] : [3, 10, 30, 100, 300, 1000], title: aps ? "Particle diameter, dry (nm)" : "Mobility diameter, dry (nm)", fmt: (v) => v.toFixed(v < 10 ? 1 : 0) + " nm" },
+      y: { domain: [ymin, ymax], log: logy, ticks: logy ? decades : niceTicks(0, ymax, 5), title: "dN/dlogDp (cm⁻³)", fmtv: (v) => v >= 10 ? Math.round(v).toLocaleString() : v.toPrecision(2) },
+      bands: [[3, lo], [hi, Math.min(hi * 1.0001, xmax)]].filter((b) => b[1] > b[0]),
+      series,
+    });
+    const mc = r.mean.map((v, i) => Math.max(v - r.single[i], 0));
+    const cmax = Math.max(...r.counts, ...r.invA.fit, ...r.invB.fit) * 1.08 || 1;
+    const t = r.tBins, tEnd = t[t.length - 1] + job.params.t_bin / 2;
+    const at = (arr) => (v) => { const i = Math.min(arr.length - 1, Math.max(0, Math.floor(v / job.params.t_bin))); return arr[i]; };
+    legend($("lg2"), [{ name: "Simulated counts", color: "var(--s-truth)" }, { name: "From multiply charged particles", color: "var(--s-mc)", cls: "fill" }, { name: "Fit, A", color: "var(--s-a)", cls: "dash" }, { name: "Fit, B", color: "var(--s-b)" }]);
+    drawChart($("c2"), {
+      label: "Raw CPC counts versus time",
+      x: { domain: [0, tEnd], log: false, ticks: niceTicks(0, tEnd, 6), title: "Time from scan start (s)", fmt: (v) => v.toFixed(1) + " s" },
+      y: { domain: [0, cmax], ticks: niceTicks(0, cmax, 5), title: "Counts per bin", fmtv: (v) => v.toFixed(1) },
+      series: [
+        { name: "Multiply charged", x: t, y: mc, color: "var(--s-mc)", area: true, areaOpacity: 0.35, noLine: true, at: at(mc) },
+        { name: "Counts", x: t, y: r.counts, color: "var(--s-truth)", width: 1.25, at: at(r.counts) },
+        { name: "Fit A", x: t, y: r.invA.fit, color: "var(--s-a)", dash: true, at: at(r.invA.fit) },
+        { name: "Fit B", x: t, y: r.invB.fit, color: "var(--s-b)", at: at(r.invB.fit) },
+      ],
+    });
+
+    // summary: each inversion is compared with the truth on its own size grid
+    const truthAt = (dd) => interpLog(r.d, r.nTrue, dd);
+    const integ = (dj, y, f) => { let s = 0; for (let i = 0; i < y.length - 1; i++) { const dm = Math.sqrt(dj[i] * dj[i + 1]) * 1e9; if (f(dm)) s += 0.5 * (y[i] + y[i + 1]) * Math.log(dj[i + 1] / dj[i]); } return s; };
+    const metrics = (dj, y) => ({ tot: integ(dj, y, () => true), small: integ(dj, y, (d) => d < 50), large: integ(dj, y, (d) => d > 100) });
+    const chi = (fit) => { let s = 0; r.counts.forEach((c, i) => { s += Math.pow(c - fit[i], 2) / Math.max(fit[i], 1); }); return s / r.counts.length; };
+    const tA = metrics(r.invA.dj, r.invA.dj.map(truthAt)), tB = metrics(r.invB.dj, r.invB.dj.map(truthAt));
+    const mA = metrics(r.invA.dj, r.invA.x), mB = metrics(r.invB.dj, r.invB.x);
+    const cell = (v, ref) => { const pct = ref ? (v - ref) / ref * 100 : 0; return `<td class="num">${v >= 10 ? Math.round(v).toLocaleString() : v.toFixed(2)}${ref != null ? `<div class="delta">${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(0)}%</div>` : ""}</td>`; };
+    let html = `<thead><tr><th>SMPS</th><th class="num">Total N, cm⁻³</th><th class="num">N below 50 nm</th><th class="num">N above 100 nm</th><th class="num">Fit to counts, χ²/n</th></tr></thead><tbody>
+      <tr><td><span class="sw2" style="background:var(--s-truth)"></span>Truth, dry, within scan range</td>${cell(tB.tot)}${cell(tB.small)}${cell(tB.large)}<td class="num">—</td></tr>
+      <tr><td><span class="sw2" style="background:var(--s-a)"></span>Inversion A</td>${cell(mA.tot, tA.tot)}${cell(mA.small, tA.small)}${cell(mA.large, tA.large)}<td class="num">${chi(r.invA.fit).toFixed(2)}</td></tr>
+      <tr><td><span class="sw2" style="background:var(--s-b)"></span>Inversion B</td>${cell(mB.tot, tB.tot)}${cell(mB.small, tB.small)}${cell(mB.large, tB.large)}<td class="num">${chi(r.invB.fit).toFixed(2)}</td></tr></tbody>`;
+    if (r.aps) {
+      const band = (o, a, b) => { let s = 0; for (let i = 0; i < o.d.length - 1; i++) { const dm = Math.sqrt(o.d[i] * o.d[i + 1]); if (dm >= a && dm <= b) s += 0.5 * (o.y[i] + o.y[i + 1]) * Math.log(o.d[i + 1] / o.d[i]); } return s; };
+      const dg = []; for (let k = 0; k <= 200; k++) dg.push(1e-6 * Math.pow(10, k / 200));
+      const tr = { d: dg, y: dg.map(truthAt) };
+      const peak = (o) => { // number median diameter within 1–10 µm
+        const tot = band(o, 1e-6, 10e-6); if (!(tot > 0)) return NaN; let s = 0;
+        for (let i = 0; i < o.d.length - 1; i++) { const dm = Math.sqrt(o.d[i] * o.d[i + 1]); if (dm < 1e-6 || dm > 10e-6) continue; const inc = 0.5 * (o.y[i] + o.y[i + 1]) * Math.log(o.d[i + 1] / o.d[i]); if (s + inc >= tot / 2) return dm * 1e6; s += inc; }
+        return NaN; };
+      const N1 = band(tr, 1e-6, 10e-6), NA = band(r.aps.A, 1e-6, 10e-6), NB = band(r.aps.B, 1e-6, 10e-6);
+      const apsTot = r.aps.counts.reduce((a, b) => a + b, 0);
+      html += `<thead><tr><th>APS · ${Math.round(apsTot).toLocaleString()} counts</th><th class="num">N, 1–10 µm, cm⁻³</th><th class="num">Median diameter, 1–10 µm</th><th></th><th></th></tr></thead><tbody>
+        <tr><td><span class="sw2" style="background:var(--s-truth)"></span>Truth, dry</td>${cell(N1)}<td class="num">${isFinite(peak(tr)) ? peak(tr).toFixed(2) : "—"}</td><td></td><td></td></tr>
+        <tr><td><span class="sw2" style="background:var(--s-a)"></span>APS with inversion A models</td>${cell(NA, N1)}<td class="num">${isFinite(peak(r.aps.A)) ? peak(r.aps.A).toFixed(2) : "—"}</td><td></td><td></td></tr>
+        <tr><td><span class="sw2" style="background:var(--s-b)"></span>APS with inversion B models</td>${cell(NB, N1)}<td class="num">${isFinite(peak(r.aps.B)) ? peak(r.aps.B).toFixed(2) : "—"}</td><td></td><td></td></tr></tbody>`;
+    }
+    $("summary").innerHTML = html;
+  }
+
+  // ------------------------------------------------------------ community library (db)
+  const W88 = { k1: [-2.3484, 0.6044, 0.4800, 0.0013, -0.1553, 0.0320], k2: [-44.4756, 79.3772, -62.8900, 26.4492, -5.7480, 0.5049] };
+  ["k1", "k2"].forEach((k) => { const box = $("fc-" + k); for (let i = 0; i < 6; i++) { const inp = document.createElement("input"); inp.type = "number"; inp.step = "any"; inp.id = `fc-${k}-${i}`; inp.setAttribute("aria-label", `Charge ${k === "k1" ? "+1" : "+2"} coefficient a${i}`); inp.placeholder = "a" + i; box.appendChild(inp); } });
+  $("fc-fill").addEventListener("click", () => { ["k1", "k2"].forEach((k) => W88[k].forEach((v, i) => { $(`fc-${k}-${i}`).value = v; })); });
+  $("fp-comp").innerHTML = COMPONENTS.map((c) => `<option value="${c.key}">${c.label}</option>`).join("") + `<option value="new_instrument">New instrument (not listed)</option>`;
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", x === b ? "true" : "false"));
+    ["data", "charging", "proposal"].forEach((k) => { $("f-" + k).hidden = k !== b.dataset.tab; });
+  }));
+  $("fd-file").addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    if (f.size > 200000) { msg("fd-msg", "That file is over 200 KB. Upload a two-column table of diameter and value.", true); return; }
+    const rd = new FileReader(); rd.onload = () => { $("fd-csv").value = String(rd.result); }; rd.readAsText(f);
+  });
+  function parseTable(text) {
+    const pts = [];
+    text.split(/\r?\n/).forEach((line) => {
+      const parts = line.split(/[,\t; ]+/).map((s) => s.trim()).filter(Boolean);
+      if (parts.length < 2) return;
+      const x = parseFloat(parts[0]), y = parseFloat(parts[1]);
+      if (isFinite(x) && isFinite(y) && x > 0) pts.push([x, y]);
+    });
+    if (pts.length < 3) throw new Error("Need at least three rows with a diameter (nm) and a value.");
+    pts.sort((a, b) => a[0] - b[0]);
+    const pct = pts.some((p) => p[1] > 1.5);
+    const y = pts.map((p) => Math.min(Math.max(pct ? p[1] / 100 : p[1], 0), 1));
+    return { x: pts.slice(0, 500).map((p) => p[0]), y: y.slice(0, 500) };
+  }
+  function msg(id, text, err) { const el = $(id); el.textContent = text; el.className = "formmsg " + (err ? "err" : "ok"); }
+
+  let db = null, user = null;
+  async function addContrib(doc, msgId, form) {
+    if (!db) { msg(msgId, "The shared library isn't available in this view. Sign in to claude.ai to contribute.", true); return; }
+    try {
+      await db.collection("contrib").add(Object.assign(doc, { by: state.me || "", at: new Date().toISOString() }));
+      msg(msgId, "Added. It now appears in the model lists, marked unreviewed.");
+      form.reset();
+    } catch (e) {
+      msg(msgId, e && e.code === "invalid_argument" ? "Your access level doesn't allow adding to the library. Ask the owner for Contributor access." :
+        e && e.code === "quota_exceeded" ? "The library is full. Ask an editor to remove old entries." : "Couldn't save. Try again in a moment.", true);
+    }
+  }
+  $("f-data").addEventListener("submit", (e) => {
+    e.preventDefault();
+    let tab; try { tab = parseTable($("fd-csv").value); } catch (err) { msg("fd-msg", err.message, true); return; }
+    const name = $("fd-name").value.trim(); if (!name) { msg("fd-msg", "Give the data a name for the model lists.", true); return; }
+    addContrib({ kind: "data", component: $("fd-comp").value, name, instrument: $("fd-inst").value.trim(), conditions: $("fd-cond").value.trim(),
+      reference: $("fd-ref").value.trim(), doi: $("fd-doi").value.trim(), x: tab.x, y: tab.y }, "fd-msg", e.target);
+  });
+  $("f-charging").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const read = (k) => Array.from({ length: 6 }, (_, i) => parseFloat($(`fc-${k}-${i}`).value));
+    const k1 = read("k1"), k2 = read("k2");
+    if ([...k1, ...k2].some((v) => !isFinite(v))) { msg("fc-msg", "Enter all twelve coefficients.", true); return; }
+    const f100 = Math.pow(10, k1.reduce((s, a, i) => s + a * Math.pow(2, i), 0));
+    if (!(f100 > 0 && f100 < 1)) { msg("fc-msg", "These coefficients give an impossible charged fraction at 100 nm. Check the signs and order a₀…a₅.", true); return; }
+    const name = $("fc-name").value.trim(); if (!name) { msg("fc-msg", "Give the parameter set a name.", true); return; }
+    addContrib({ kind: "charging", component: "charging", name, conditions: $("fc-cond").value.trim(), reference: $("fc-ref").value.trim(), doi: $("fc-doi").value.trim(), k1, k2 }, "fc-msg", e.target);
+  });
+  $("f-proposal").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("fp-name").value.trim(); if (!name) { msg("fp-msg", "Name the model.", true); return; }
+    addContrib({ kind: "proposal", component: $("fp-comp").value, name, description: $("fp-desc").value.trim(), reference: $("fp-ref").value.trim(), doi: $("fp-doi").value.trim() }, "fp-msg", e.target);
+  });
+
+  const compLabel = (k) => (COMPONENTS.find((c) => c.key === k) || {}).label || (k === "new_instrument" ? "New instrument" : k);
+  const kindLabel = { data: "Measured data", charging: "Charging parameters", proposal: "Proposal, awaiting implementation" };
+  async function renderContribs() {
+    const box = $("contribs");
+    $("ccount").textContent = state.contribs.length ? `${state.contribs.length} entr${state.contribs.length === 1 ? "y" : "ies"}` : "";
+    if (!state.contribs.length) { box.innerHTML = `<div class="empty">${db ? "No contributions yet. Use the form to add the first measured curve or parameter set." : "The shared library loads for signed-in viewers. Built-in models still work."}</div>`; return; }
+    const ids = [...new Set(state.contribs.map((c) => c.by).filter(Boolean))];
+    let names = {}; try { if (user && ids.length) names = await user.profiles(ids); } catch (e) { names = {}; }
+    const sorted = state.contribs.slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+    box.innerHTML = sorted.map((c) => {
+      const rev = !!state.reviews[c.id];
+      const who = (names[c.by] && names[c.by].name) || "Someone";
+      const pts = c.kind === "data" ? ` · ${c.x.length} points, ${fmt(c.x[0])}–${fmt(c.x[c.x.length - 1])} nm` : "";
+      const mine = state.me && c.by === state.me;
+      return `<div class="ci"><div class="h"><b>${esc(c.name)}</b>${c.kind === "proposal" ? `<span class="pill">Queued</span>` : rev ? `<span class="pill ok">Reviewed</span>` : `<span class="pill warn">Unreviewed</span>`}</div>
+        <div class="meta">${kindLabel[c.kind]} · ${esc(compLabel(c.component))}${pts}</div>
+        ${c.instrument || c.conditions ? `<div class="meta">${esc([c.instrument, c.conditions].filter(Boolean).join(" · "))}</div>` : ""}
+        ${c.description ? `<div class="ref">${esc(c.description)}</div>` : ""}
+        ${c.reference || c.doi ? `<div class="ref">${esc(c.reference)}${c.doi ? ` <a href="${linkFor(c.doi)}" target="_blank" rel="noopener">${esc(c.doi)}</a>` : ""}</div>` : ""}
+        <div class="meta">Added by ${esc(who)} · ${esc(String(c.at || "").slice(0, 10))}</div>
+        ${state.canReview || mine ? `<div class="acts">${state.canReview && c.kind !== "proposal" ? `<button type="button" class="small" data-review="${c.id}">${rev ? "Mark unreviewed" : "Mark reviewed"}</button>` : ""}<button type="button" class="small" data-del="${c.id}">Remove</button></div>` : ""}
+      </div>`;
+    }).join("");
+  }
+  $("contribs").addEventListener("click", async (e) => {
+    const r = e.target.closest("[data-review]"), d = e.target.closest("[data-del]");
+    if (!db) return;
+    try {
+      if (r) { const next = Object.assign({}, state.reviews); if (next[r.dataset.review]) delete next[r.dataset.review]; else next[r.dataset.review] = true; await db.doc("moderation/reviews").set(next); }
+      if (d) {
+        if (d.dataset.confirm !== "1") { d.dataset.confirm = "1"; d.textContent = "Confirm remove"; return; }
+        await db.doc("contrib/" + d.dataset.del).delete();
+      }
+    } catch (err) { $("libstate").textContent = "Couldn't save that change"; }
+  });
+
+  function onLibraryChange() {
+    // drop selections that point at removed entries
+    ["truth", "A", "B"].forEach((c) => Object.keys(state.cfg[c]).forEach((k) => {
+      const v = state.cfg[c][k];
+      if (v.startsWith("user:") && !state.contribs.some((x) => "user:" + x.id === v)) state.cfg[c][k] = CURRENT[k];
+    }));
+    renderLedger(); renderContribs();
+  }
+
+  async function connect() {
+    if (!window.claude || !window.claude.use) { $("libstate").textContent = "Read-only"; renderContribs(); return; }
+    try { user = await window.claude.use("user"); } catch (e) { user = null; }
+    try { db = await window.claude.use("db"); } catch (e) { db = null; }
+    if (!db) { $("libstate").textContent = "Sign in to contribute"; renderContribs(); return; }
+    try { state.me = user ? await user.id() : null; } catch (e) { state.me = null; }
+    try { state.canReview = user ? !!(await user.canEdit()) : false; } catch (e) { state.canReview = false; }
+    let canWrite = null; try { canWrite = user ? await user.can("data.write") : null; } catch (e) { canWrite = null; }
+    $("libstate").textContent = canWrite === false ? "Read-only access" : state.canReview ? "Connected · you can review" : "Connected";
+    $("libstate").className = "pill ok";
+    db.collection("contrib").onSnapshot((snap) => {
+      state.contribs = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()))
+        .filter((c) => c && typeof c.name === "string" && (c.kind !== "data" || (Array.isArray(c.x) && Array.isArray(c.y) && c.x.length === c.y.length && c.x.length >= 3))
+          && (c.kind !== "charging" || (Array.isArray(c.k1) && Array.isArray(c.k2) && c.k1.length === 6 && c.k2.length === 6)));
+      onLibraryChange();
+    }, () => { $("libstate").textContent = "Library unavailable"; $("libstate").className = "pill"; });
+    db.doc("moderation/reviews").onSnapshot((snap) => { state.reviews = snap.exists ? Object.assign({}, snap.data()) : {}; onLibraryChange(); }, () => {});
+  }
+
+  const onRun = [];
+  window.StreamUI = { state, schedule, renderLedger, CURRENT, showDiagramNote, getDb: () => db, getUser: () => user,
+    readJob, drawChart, legend, interpLog, niceTicks, engine: () => { if (!inline) { const f = new Function("self", engineSrc + "\nreturn self.STREAM;"); inline = f({}); } return inline; }, onRun };
+  renderLedger();
+  renderContribs();
+  go();
+  connect();
+})();
+</script>
+<script>/*DIAGRAM_JS*/</script>
+

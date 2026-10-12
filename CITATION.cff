@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use STREAM, please cite it as below."
+title: "STREAM: Simulator of Train Response for Evaluating Aerosol Measurements"
+version: 0.1.0
+date-released: 2026-10-11
+authors:
+  - family-names: Dhaniyala
+    given-names: Suresh
+    affiliation: Clarkson University

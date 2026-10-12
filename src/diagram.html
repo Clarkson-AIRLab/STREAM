@@ -1,0 +1,63 @@
+  <section class="sec" aria-labelledby="h-diag">
+    <div class="sec-head">
+      <h2 id="h-diag">Setup diagram</h2>
+      <span class="eyebrow" id="dg-src">Template · SMPS, long DMA</span>
+    </div>
+    <div class="dg-pick">
+      <div class="dg-pick-col">
+        <span class="eyebrow">Start from a template</span>
+        <div class="dg-cards" id="dg-templates"></div>
+      </div>
+      <div class="dg-pick-col">
+        <span class="eyebrow">Or upload a schematic</span>
+        <label class="dg-drop" id="dg-drop" for="dg-file">
+          <b>Drop an image of your setup here, or choose a file</b>
+          <span>PNG, JPEG, WebP or GIF. A photo of a whiteboard sketch works. Claude reads the instruments and tubing and builds the diagram for you to check.</span>
+          <input type="file" id="dg-file" accept="image/png,image/jpeg,image/webp,image/gif">
+        </label>
+        <span class="eyebrow">Saved setups</span>
+        <div class="dg-saved" id="dg-saved"><div class="empty">Saved setups appear here.</div></div>
+      </div>
+    </div>
+
+    <div class="dg-work">
+      <div class="card dg-canvas-card">
+        <div class="dg-toolbar">
+          <label class="chk">Add <select id="dg-add" aria-label="Add a component"></select></label>
+          <button type="button" class="small" id="dg-addbtn">Add</button>
+          <button type="button" class="small" id="dg-layout">Tidy layout</button>
+          <label class="chk" id="dg-trace-wrap" hidden><input type="checkbox" id="dg-trace"> Show schematic behind</label>
+          <span class="dg-hint">Drag blocks to move. Drag from the dot on a block's right edge to another block to connect them. One block can feed several instruments: drag from its dot again for each.</span>
+        </div>
+        <div class="dg-scroll"><svg id="dg-svg" viewBox="0 0 960 420" role="img" aria-label="Diagram of the experimental setup"></svg></div>
+        <div class="dg-path" id="dg-path"></div>
+        <div class="dg-probe" id="dg-probe">
+          <div class="sec-head"><h3 id="dg-probe-title">Probe</h3><span class="eyebrow">Truth models · aerosol from the setup values</span></div>
+          <p class="delta" id="dg-probe-empty">Select a block or a tube to see the aerosol at that point: at a block's outlet, or at the end of a tube.</p>
+          <div id="dg-probe-body" hidden>
+            <div class="runbar" id="dg-probe-v" hidden><label class="chk" for="dg-pv">DMA voltage</label><input type="range" id="dg-pv" min="0" max="1000" step="1" value="500" aria-label="DMA voltage for the probe"><span id="dg-pv-out" class="mono"></span></div>
+            <div class="legend" id="dg-plg"></div>
+            <div class="chart" id="dg-pc"></div>
+            <div class="dg-pstats" id="dg-pstats"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card dg-side">
+        <div id="dg-image-box" hidden>
+          <div class="sec-head"><h3>Uploaded schematic</h3><button type="button" class="small" id="dg-read">Read with Claude</button></div>
+          <img id="dg-img" alt="Uploaded schematic of the experimental setup">
+          <p class="formmsg" id="dg-readmsg"></p>
+        </div>
+        <div id="dg-inspector"><p class="delta">Select a block or a connection to edit it.</p></div>
+        <div class="dg-apply">
+          <h3>Use in the simulation</h3>
+          <div id="dg-summary" class="delta"></div>
+          <div class="runbar"><button type="button" class="primary" id="dg-apply">Apply to setup</button><span class="formmsg" id="dg-applymsg"></span></div>
+          <form id="dg-saveform" class="dg-saveform">
+            <label class="fl"><span>Save this setup to the shared library</span><input type="text" id="dg-name" placeholder="e.g. Clarkson chamber, SMPS + OPC"></label>
+            <div class="runbar"><button type="submit" class="small">Save setup</button><span class="formmsg" id="dg-savemsg"></span></div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
